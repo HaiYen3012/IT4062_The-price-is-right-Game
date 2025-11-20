@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <!-- alias để tạo resource path qrc:/main.qml -->
+        <file alias="main.qml">../qml/main.qml</file>
+    </qresource>
+</RCC>
