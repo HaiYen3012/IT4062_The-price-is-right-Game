@@ -37,7 +37,7 @@ typedef struct _message
   enum msg_type type;
   char data_type[25];
   int length;
-  char value[BUFF_SIZE];
+  char value[BUFF_SIZE];    // value phải có dạng "<param1> | <param2> | ..."
 } Message;
 
 typedef struct _account

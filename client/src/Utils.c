@@ -46,8 +46,9 @@ int signup(char username[], char password[])
   Message msg;
   msg.type = SIGNUP;
   strcpy(msg.data_type, "string");
+  // Format: username | password
   strcpy(msg.value, username);
-  strcat(msg.value, " ");
+  strcat(msg.value, " | ");
   strcat(msg.value, password);
   msg.length = strlen(msg.value);
   if (send(sockfd, &msg, sizeof(Message), 0) < 0)

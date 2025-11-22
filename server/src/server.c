@@ -155,7 +155,30 @@ void *handle_client(void *arg)
             case SIGNUP:
                 {
                     char username[BUFF_SIZE], password[BUFF_SIZE];
-                    sscanf(msg.value, "%s %s", username, password);
+                    // Parse format: username | password
+                    char *token = strtok(msg.value, "|");
+                    if (token != NULL) {
+                        // Trim leading/trailing spaces
+                        while (*token == ' ') token++;
+                        strcpy(username, token);
+                        // Remove trailing spaces
+                        char *end = username + strlen(username) - 1;
+                        while (end > username && *end == ' ') {
+                            *end = '\0';
+                            end--;
+                        }
+                        
+                        token = strtok(NULL, "|");
+                        if (token != NULL) {
+                            while (*token == ' ') token++;
+                            strcpy(password, token);
+                            end = password + strlen(password) - 1;
+                            while (end > password && *end == ' ') {
+                                *end = '\0';
+                                end--;
+                            }
+                        }
+                    }
                     
                     result = handle_signup(username, password);
                     msg.type = result;
