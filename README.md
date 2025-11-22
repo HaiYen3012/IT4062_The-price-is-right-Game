@@ -9,8 +9,8 @@ Dự án được phát triển bằng C/C++ sử dụng socket programming (POS
 - **Client**: Qt 5.15+ với QML/QtQuick (C++ backend + C socket layer)
 - **Server**: Pure C với POSIX sockets, pthread, MySQL C API
 - **Protocol**: Custom Message-based protocol qua TCP
-- **Database**: MySQL 8.0+ (chạy qua XAMPP)
-- **Platform**: Linux (Ubuntu 20.04+)
+- **Database**: MySQL Server 8.0+ (hỗ trợ cả Ubuntu Native và WSL2)
+- **Platform**: Linux (Ubuntu 20.04+, WSL2)
 
 ## 📁 Cấu trúc dự án
 
@@ -71,32 +71,53 @@ sudo apt install libmysqlclient-dev
 
 # Build tools
 sudo apt install gcc g++ make
+
+# MySQL Server
+sudo apt install mysql-server
 ```
 
-### XAMPP MySQL Setup
+### MySQL Server Setup
 
-1. **Cài đặt XAMPP**:
+**Chi tiết đầy đủ xem file [`database/DATABASE_SETUP.md`](database/DATABASE_SETUP.md)**
+
+#### Quick Setup:
+
+1. **Khởi động MySQL**:
    ```bash
-   # Download từ https://www.apachefriends.org/download.html
-   sudo chmod +x xampp-linux-x64-*-installer.run
-   sudo ./xampp-linux-x64-*-installer.run
+   # Ubuntu Native
+   sudo systemctl start mysql
+   sudo systemctl enable mysql
+   
+   # WSL2
+   sudo service mysql start
    ```
 
-2. **Khởi động MySQL**:
+2. **Tạo database và user**:
    ```bash
-   sudo /opt/lampp/lampp startmysql
+   cd database
+   sudo mysql
    ```
-
-3. **Tạo database**:
-   ```bash
-   /opt/lampp/bin/mysql -u root
-   ```
+   
+   Trong MySQL shell:
    ```sql
    CREATE DATABASE hay_chon_gia_dung CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   
+   CREATE USER 'admin'@'localhost' IDENTIFIED WITH mysql_native_password BY '123456';
+   CREATE USER 'admin'@'%' IDENTIFIED WITH mysql_native_password BY '123456';
+   
+   GRANT ALL PRIVILEGES ON hay_chon_gia_dung.* TO 'admin'@'localhost' WITH GRANT OPTION;
+   GRANT ALL PRIVILEGES ON hay_chon_gia_dung.* TO 'admin'@'%' WITH GRANT OPTION;
+   FLUSH PRIVILEGES;
+   
    USE hay_chon_gia_dung;
-   SOURCE /path/to/database/init.sql;
-   SOURCE /path/to/database/seed_data.sql;
+   SOURCE init.sql;
+   SOURCE seed_data.sql;
+   
+   SELECT COUNT(*) as total_users FROM users;
+   exit;
    ```
+
+3. **Verify**: Nếu thấy `total_users: 5` → Setup thành công! ✅
 
 ## 🚀 Build & Run
 
@@ -123,7 +144,11 @@ Output: `client` executable
 
 **Bước 1: Khởi động MySQL (nếu chưa chạy)**
 ```bash
-sudo /opt/lampp/lampp startmysql
+# Ubuntu Native
+sudo systemctl start mysql
+
+# WSL2
+sudo service mysql start
 ```
 
 **Bước 2: Chạy Server**
@@ -133,9 +158,21 @@ cd server
 ```
 
 Server sẽ:
-- Kết nối MySQL database 'hay_chon_gia_dung'
+- Auto-detect MySQL socket path
+- Kết nối MySQL database 'hay_chon_gia_dung' với user 'admin'
 - Listen trên port 5555
 - Sẵn sàng nhận connections
+
+Expected output:
+```
+=== HayChonGiaDung C Server ===
+[DB] Detected MySQL socket: /var/run/mysqld/mysqld.sock
+[DB] Connected to MySQL database 'hay_chon_gia_dung' as user 'admin'
+[DB] Test query OK.
+[DB] Current users in DB: 5
+[SERVER] Listening on port 5555...
+[SERVER] Press Ctrl+C to stop
+```
 
 **Bước 3: Chạy Client (terminal khác)**
 ```bash
@@ -214,6 +251,13 @@ Database `hay_chon_gia_dung` gồm 11 tables:
 Test users (password: `123456`):
 - nhung, duyen, ha, yen, guest1
 
+Database credentials:
+- Host: `localhost` hoặc `127.0.0.1`
+- User: `admin`
+- Password: `123456`
+- Database: `hay_chon_gia_dung`
+- Port: `3306`
+
 ## 🐛 Troubleshooting
 
 ### Client không kết nối được server
@@ -230,31 +274,62 @@ netstat -tuln | grep 5555
 sudo apt install qt5-qmake qtbase5-dev
 ```
 
-### Server lỗi MySQL connection
+### Server lỗi "Can't connect to MySQL server"
 ```bash
-# Kiểm tra MySQL đang chạy
-sudo /opt/lampp/lampp status
+# Kiểm tra MySQL có đang chạy
+sudo systemctl status mysql    # Ubuntu
+sudo service mysql status      # WSL
 
-# Kiểm tra socket path trong database.c
-# Phải là: /opt/lampp/var/mysql/mysql.sock
+# Nếu stopped, khởi động lại
+sudo systemctl start mysql     # Ubuntu
+sudo service mysql start       # WSL
+
+# Kiểm tra socket file tồn tại
+ls -l /var/run/mysqld/mysqld.sock
+```
+
+### Server lỗi "Access denied for user 'admin'"
+```bash
+# Tạo lại user admin
+sudo mysql -e "
+DROP USER IF EXISTS 'admin'@'localhost';
+CREATE USER 'admin'@'localhost' IDENTIFIED WITH mysql_native_password BY '123456';
+GRANT ALL PRIVILEGES ON hay_chon_gia_dung.* TO 'admin'@'localhost' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+"
+
+# Test kết nối
+mysql -u admin -p123456 -e "USE hay_chon_gia_dung; SELECT COUNT(*) FROM users;"
 ```
 
 ### Client lỗi "Could not find Qt platform plugin wayland"
 - Warning này không ảnh hưởng, client vẫn chạy bình thường với X11 fallback
 
+### Port 3306 conflict (nếu có XAMPP cũ)
+```bash
+# Stop XAMPP MySQL
+sudo /opt/lampp/lampp stopmysql
+
+# Hoặc kill process
+sudo killall mysqld
+
+# Restart MySQL Server
+sudo systemctl restart mysql
+```
+
 ## 👥 Team Members
 
 - **Duyên**: Registration system (signup feature)
-- **[Tên bạn]**: Login system
-- **[Tên bạn]**: Game logic
-- **[Tên bạn]**: UI/UX
+- ****: Login system
+- ****: Game logic
+- ****: UI/UX
 
-## 📝 License
+## �📝 License
 
 Dự án môn học IT4062 - Network Programming
 
 ---
 
-**Note**: Đây là phiên bản đang phát triển. Một số tính năng game logic chưa được implement.
+**Note**: Dự án hỗ trợ cả Ubuntu Native và WSL2. Xem `DATABASE_SETUP.md` để biết cách setup cho môi trường của bạn.
 
 

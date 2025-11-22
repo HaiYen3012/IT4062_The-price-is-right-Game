@@ -1,16 +1,38 @@
 #include "database.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
-// cấu hình DB tạm hardcode (sau này có thể đọc từ config.ini)
+// Cấu hình DB (khớp với DATABASE_SETUP.md)
 #define DB_HOST "localhost"
-#define DB_USER "root"
-#define DB_PASS ""  // XAMPP MySQL không có password
+#define DB_USER "admin"
+#define DB_PASS "123456"
 #define DB_NAME "hay_chon_gia_dung"
 #define DB_PORT 3306
-#define DB_SOCKET "/opt/lampp/var/mysql/mysql.sock"  // XAMPP socket path
 
 MYSQL *g_db_conn = NULL;
+
+// Hàm tự động detect MySQL socket path
+const char* detect_mysql_socket(void) {
+    // Thử các socket paths phổ biến
+    const char* socket_paths[] = {
+        "/var/run/mysqld/mysqld.sock",     // Ubuntu/Debian default
+        "/tmp/mysql.sock",                  // macOS/some Linux
+        "/var/lib/mysql/mysql.sock",        // RedHat/CentOS
+        "/opt/lampp/var/mysql/mysql.sock",  // XAMPP (nếu ai đó vẫn dùng)
+        NULL
+    };
+    
+    for (int i = 0; socket_paths[i] != NULL; i++) {
+        if (access(socket_paths[i], F_OK) == 0) {
+            printf("[DB] Detected MySQL socket: %s\n", socket_paths[i]);
+            return socket_paths[i];
+        }
+    }
+    
+    printf("[DB] No socket file found, using NULL (TCP connection)\n");
+    return NULL;  // Fallback to TCP connection
+}
 
 int db_init(void) {
     g_db_conn = mysql_init(NULL);
@@ -19,6 +41,9 @@ int db_init(void) {
         return -1;
     }
 
+    // Auto-detect socket path
+    const char* socket_path = detect_mysql_socket();
+    
     if (mysql_real_connect(
             g_db_conn,
             DB_HOST,
@@ -26,12 +51,15 @@ int db_init(void) {
             DB_PASS,
             DB_NAME,
             DB_PORT,
-            DB_SOCKET,  // Sử dụng XAMPP socket
+            socket_path,  // Auto-detected hoặc NULL
             0
         ) == NULL)
     {
         fprintf(stderr, "[DB] mysql_real_connect() failed: %s\n",
                 mysql_error(g_db_conn));
+        fprintf(stderr, "[DB] Check if MySQL is running: sudo service mysql start\n");
+        fprintf(stderr, "[DB] Or verify credentials in database.c (user='%s', db='%s')\n", 
+                DB_USER, DB_NAME);
         mysql_close(g_db_conn);
         g_db_conn = NULL;
         return -1;
