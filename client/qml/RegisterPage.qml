@@ -15,38 +15,40 @@ Page {
     Text {
         id: logoText
         text: "?"
-        font.pixelSize: 60
+        font.pixelSize: 50
         font.bold: true
         color: "#FF4444"
         style: Text.Outline
         styleColor: "#FFFFFF"
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.topMargin: 30
+        anchors.topMargin: 15
     }
 
     // Register Form Container
     Rectangle {
         id: registerForm
         width: 500
-        height: 480
+        height: 400
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: logoText.bottom
-        anchors.topMargin: 20
+        anchors.topMargin: 10
         color: rootWindow.mainAppColor
         radius: 25
         border.color: rootWindow.buttonColor
         border.width: 4
 
         Column {
-            anchors.centerIn: parent
-            spacing: 20
+            anchors.top: parent.top
+            anchors.topMargin: 15
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 12
             width: parent.width - 60
 
             // REGISTER Title
             Text {
                 text: "REGISTER"
-                font.pixelSize: 32
+                font.pixelSize: 28
                 font.bold: true
                 color: rootWindow.textColor
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -66,7 +68,7 @@ Page {
 
                 Rectangle {
                     width: parent.width
-                    height: 45
+                    height: 40
                     color: "#FFFFFF"
                     radius: 10
 
@@ -74,7 +76,7 @@ Page {
                         id: usernameField
                         anchors.fill: parent
                         anchors.margins: 5
-                        font.pixelSize: 16
+                        font.pixelSize: 14
                         placeholderText: ""
                         background: Rectangle {
                             color: "transparent"
@@ -97,7 +99,7 @@ Page {
 
                 Rectangle {
                     width: parent.width
-                    height: 45
+                    height: 40
                     color: "#FFFFFF"
                     radius: 10
 
@@ -105,7 +107,7 @@ Page {
                         id: emailField
                         anchors.fill: parent
                         anchors.margins: 5
-                        font.pixelSize: 16
+                        font.pixelSize: 14
                         placeholderText: ""
                         background: Rectangle {
                             color: "transparent"
@@ -128,7 +130,7 @@ Page {
 
                 Rectangle {
                     width: parent.width
-                    height: 45
+                    height: 40
                     color: "#FFFFFF"
                     radius: 10
 
@@ -136,7 +138,7 @@ Page {
                         id: passwordField
                         anchors.fill: parent
                         anchors.margins: 5
-                        font.pixelSize: 16
+                        font.pixelSize: 14
                         echoMode: TextInput.Password
                         placeholderText: ""
                         background: Rectangle {
@@ -160,7 +162,7 @@ Page {
 
                 Rectangle {
                     width: parent.width
-                    height: 45
+                    height: 40
                     color: "#FFFFFF"
                     radius: 10
 
@@ -168,7 +170,7 @@ Page {
                         id: confirmPasswordField
                         anchors.fill: parent
                         anchors.margins: 5
-                        font.pixelSize: 16
+                        font.pixelSize: 14
                         echoMode: TextInput.Password
                         placeholderText: ""
                         background: Rectangle {
@@ -188,18 +190,19 @@ Page {
                     checked: false
                     
                     indicator: Rectangle {
-                        implicitWidth: 24
-                        implicitHeight: 24
+                        implicitWidth: 20
+                        implicitHeight: 20
                         radius: 4
                         border.color: rootWindow.buttonColor
                         border.width: 2
                         color: agreementCheckbox.checked ? rootWindow.buttonColor : "#FFFFFF"
+                        anchors.verticalCenter: parent.verticalCenter
 
                         Text {
                             anchors.centerIn: parent
                             text: "✓"
                             color: "#FFFFFF"
-                            font.pixelSize: 18
+                            font.pixelSize: 14
                             font.bold: true
                             visible: agreementCheckbox.checked
                         }
@@ -221,14 +224,14 @@ Page {
     Row {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: registerForm.bottom
-        anchors.topMargin: 20
+        anchors.topMargin: 15
         spacing: 40
 
         // CANCEL Button
         Button {
             id: cancelButton
-            width: 200
-            height: 60
+            width: 180
+            height: 50
             
             contentItem: Text {
                 text: "CANCEL"
@@ -265,8 +268,8 @@ Page {
         // CONFIRM Button
         Button {
             id: confirmButton
-            width: 200
-            height: 60
+            width: 180
+            height: 50
             
             contentItem: Text {
                 text: "CONFIRM"
