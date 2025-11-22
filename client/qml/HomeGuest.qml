@@ -166,105 +166,53 @@ Page {
         }
     }
 
-    // Buttons Container
-    Column {
+    // REGISTER Button (centered)
+    Button {
+        id: registerButton
+        width: 300
+        height: 80
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 120
-        spacing: 30
-
-        // REGISTER Button
-        Button {
-            id: registerButton
-            width: 300
-            height: 80
+        
+        contentItem: Text {
+            text: "REGISTER"
+            font.pixelSize: 28
+            font.bold: true
+            color: rootWindow.textColor
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+        
+        background: Rectangle {
+            color: registerButton.pressed ? Qt.darker(rootWindow.buttonColor, 1.2) : 
+                   registerButton.hovered ? Qt.lighter(rootWindow.buttonColor, 1.1) : 
+                   rootWindow.buttonColor
+            radius: 15
+            border.color: "#004466"
+            border.width: 4
             
-            contentItem: Text {
-                text: "REGISTER"
-                font.pixelSize: 28
-                font.bold: true
-                color: rootWindow.textColor
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 4
+                color: "transparent"
+                radius: 12
+                border.color: Qt.lighter(rootWindow.buttonColor, 1.3)
+                border.width: 2
             }
             
-            background: Rectangle {
-                color: registerButton.pressed ? Qt.darker(rootWindow.buttonColor, 1.2) : 
-                       registerButton.hovered ? Qt.lighter(rootWindow.buttonColor, 1.1) : 
-                       rootWindow.buttonColor
-                radius: 15
-                border.color: "#004466"
-                border.width: 4
-                
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 4
-                    color: "transparent"
-                    radius: 12
-                    border.color: Qt.lighter(rootWindow.buttonColor, 1.3)
-                    border.width: 2
-                }
-                
-                Behavior on color {
-                    ColorAnimation { duration: 100 }
-                }
-            }
-            
-            onClicked: {
-                stackView.push("qrc:/qml/RegisterPage.qml")
-            }
-            
-            scale: registerButton.pressed ? 0.95 : 1.0
-            Behavior on scale {
-                NumberAnimation { duration: 100 }
+            Behavior on color {
+                ColorAnimation { duration: 100 }
             }
         }
-
-        // LOGIN Button
-        Button {
-            id: loginButton
-            width: 300
-            height: 80
-            
-            contentItem: Text {
-                text: "LOGIN"
-                font.pixelSize: 28
-                font.bold: true
-                color: rootWindow.textColor
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-            
-            background: Rectangle {
-                color: loginButton.pressed ? Qt.darker(rootWindow.mainAppColor, 1.2) : 
-                       loginButton.hovered ? Qt.lighter(rootWindow.mainAppColor, 1.1) : 
-                       rootWindow.mainAppColor
-                radius: 15
-                border.color: "#0096C8"
-                border.width: 4
-                
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 4
-                    color: "transparent"
-                    radius: 12
-                    border.color: Qt.lighter(rootWindow.mainAppColor, 1.3)
-                    border.width: 2
-                }
-                
-                Behavior on color {
-                    ColorAnimation { duration: 100 }
-                }
-            }
-            
-            onClicked: {
-                stackView.push("qrc:/qml/LoginPage.qml")
-            }
-            
-            scale: loginButton.pressed ? 0.95 : 1.0
-            Behavior on scale {
-                NumberAnimation { duration: 100 }
-            }
+        
+        onClicked: {
+            stackView.push("qrc:/qml/RegisterPage.qml")
+        }
+        
+        scale: registerButton.pressed ? 0.95 : 1.0
+        Behavior on scale {
+            NumberAnimation { duration: 100 }
         }
     }
 }

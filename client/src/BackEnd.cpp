@@ -49,44 +49,6 @@ void BackEnd::disconnectToServer()
     disconnect_to_server();
 }
 
-void BackEnd::signIn(QString username, QString password)
-{
-    qDebug() << "Signing in with username: " << username;
-    
-    char uname[256], pwd[256];
-    strcpy(uname, username.toStdString().c_str());
-    strcpy(pwd, password.toStdString().c_str());
-    
-    int result = login(uname, pwd);
-    
-    switch(result) {
-        case LOGIN_SUCCESS:
-            qDebug() << "Login success!";
-            user_name = username;
-            emit loginSuccess();
-            break;
-        case LOGGED_IN:
-            qDebug() << "Account already logged in!";
-            emit loggedIn();
-            break;
-        case WRONG_PASSWORD:
-            qDebug() << "Wrong password!";
-            emit wrongPassword();
-            break;
-        case ACCOUNT_NOT_EXIST:
-            qDebug() << "Account does not exist!";
-            emit accountNotExist();
-            break;
-        case ACCOUNT_BLOCKED:
-            qDebug() << "Account is blocked!";
-            emit accountBlocked();
-            break;
-        default:
-            qDebug() << "Unknown error!";
-            break;
-    }
-}
-
 void BackEnd::signUp(QString username, QString password)
 {
     qDebug() << "Signing up with username: " << username;

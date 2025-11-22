@@ -49,7 +49,6 @@ typedef struct _account
 /*--------------------- Function Declaration -------------------------*/
 int connect_to_server(char ip[], int port);
 int disconnect_to_server();
-int login(char username[], char password[]);
 int signup(char username[], char password[]);
 int logout();
 

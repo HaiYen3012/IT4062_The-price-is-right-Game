@@ -22,7 +22,6 @@ ApplicationWindow {
     
     property string currentAction: "none"
     property bool connectionFailed: false
-    property string loginStatus: "none"
     property string signupStatus: "none"
 
     BackEnd {
@@ -36,26 +35,6 @@ ApplicationWindow {
 
         onConnectFail: {
             rootWindow.connectionFailed = true
-        }
-
-        onLoginSuccess: {
-            rootWindow.loginStatus = "LOGIN_SUCCESS"
-        }
-
-        onLoggedIn: {
-            rootWindow.loginStatus = "LOGGED_IN"
-        }
-
-        onAccountBlocked: {
-            rootWindow.loginStatus = "ACCOUNT_BLOCKED"
-        }
-
-        onAccountNotExist: {
-            rootWindow.loginStatus = "ACCOUNT_NOT_EXIST"
-        }
-
-        onWrongPassword: {
-            rootWindow.loginStatus = "WRONG_PASSWORD"
         }
 
         onSignupSuccess: {
@@ -254,29 +233,6 @@ ApplicationWindow {
                     notifyErrorPopup.popMessage = "Không thể kết nối đến server!"
                     notifyErrorPopup.open()
                     Qt.quit()
-                }
-            }
-            else if (currentAction === "login") {
-                if (loginStatus === "LOGIN_SUCCESS") {
-                    notifySuccessPopup.popMessage = "Đăng nhập thành công!"
-                    notifySuccessPopup.open()
-                    // TODO: Navigate to main game screen
-                }
-                else if (loginStatus === "LOGGED_IN") {
-                    notifyErrorPopup.popMessage = "Tài khoản đã đăng nhập ở nơi khác!"
-                    notifyErrorPopup.open()
-                }
-                else if (loginStatus === "ACCOUNT_BLOCKED") {
-                    notifyErrorPopup.popMessage = "Tài khoản đã bị khóa!"
-                    notifyErrorPopup.open()
-                }
-                else if (loginStatus === "ACCOUNT_NOT_EXIST") {
-                    notifyErrorPopup.popMessage = "Tài khoản không tồn tại!"
-                    notifyErrorPopup.open()
-                }
-                else if (loginStatus === "WRONG_PASSWORD") {
-                    notifyErrorPopup.popMessage = "Sai mật khẩu!"
-                    notifyErrorPopup.open()
                 }
             }
             else if (currentAction === "signup") {
