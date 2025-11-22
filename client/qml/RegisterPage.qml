@@ -30,7 +30,9 @@ Page {
         id: registerForm
         width: 500
         height: 480
-        anchors.centerIn: parent
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: logoText.bottom
+        anchors.topMargin: 20
         color: rootWindow.mainAppColor
         radius: 25
         border.color: rootWindow.buttonColor
@@ -218,8 +220,8 @@ Page {
     // Bottom Buttons
     Row {
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 40
+        anchors.top: registerForm.bottom
+        anchors.topMargin: 20
         spacing: 40
 
         // CANCEL Button
