@@ -11,8 +11,8 @@ SRCS    = $(SRC_DIR)/main.c \
 
 TARGET  = $(BIN_DIR)/server
 
-CFLAGS  = -I$(INC_DIR) -Wall -Wextra -O2
-LDLIBS  = -lmysqlclient
+CFLAGS  = -I$(INC_DIR) -Wall -Wextra -O2 -pthread
+LDLIBS  = -lmysqlclient -pthread
 
 all: $(TARGET)
 
