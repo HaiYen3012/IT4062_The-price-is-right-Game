@@ -4,10 +4,11 @@
 
 // cấu hình DB tạm hardcode (sau này có thể đọc từ config.ini)
 #define DB_HOST "localhost"
-#define DB_USER "admin"
-#define DB_PASS "123456"  // sửa giống MySQL
+#define DB_USER "root"
+#define DB_PASS ""  // XAMPP MySQL không có password
 #define DB_NAME "hay_chon_gia_dung"
-#define DB_PORT 0    
+#define DB_PORT 3306
+#define DB_SOCKET "/opt/lampp/var/mysql/mysql.sock"  // XAMPP socket path
 
 MYSQL *g_db_conn = NULL;
 
@@ -25,7 +26,7 @@ int db_init(void) {
             DB_PASS,
             DB_NAME,
             DB_PORT,
-            NULL,
+            DB_SOCKET,  // Sử dụng XAMPP socket
             0
         ) == NULL)
     {
