@@ -1,0 +1,121 @@
+#include "../headers/BackEnd.h"
+#include <QDebug>
+
+std::string BackEnd::server_ip = "";
+int BackEnd::server_port = 0;
+BackEnd *BackEnd::instance = nullptr;
+
+BackEnd::BackEnd(QObject *parent) : QObject(parent)
+{
+    instance = this;
+}
+
+BackEnd::~BackEnd()
+{
+}
+
+QString BackEnd::getUserName() const
+{
+    return user_name;
+}
+
+void BackEnd::setUserName(const QString &value)
+{
+    user_name = value;
+    emit userNameChanged();
+}
+
+void BackEnd::connectToServer()
+{
+    qDebug() << "Connecting to server: " << server_ip.c_str() << ":" << server_port;
+    
+    char ip[256];
+    strcpy(ip, server_ip.c_str());
+    
+    int result = connect_to_server(ip, server_port);
+    
+    if (result == 1) {
+        qDebug() << "Connect success!";
+        emit connectSuccess();
+    } else {
+        qDebug() << "Connect failed!";
+        emit connectFail();
+    }
+}
+
+void BackEnd::disconnectToServer()
+{
+    qDebug() << "Disconnecting from server...";
+    disconnect_to_server();
+}
+
+void BackEnd::signIn(QString username, QString password)
+{
+    qDebug() << "Signing in with username: " << username;
+    
+    char uname[256], pwd[256];
+    strcpy(uname, username.toStdString().c_str());
+    strcpy(pwd, password.toStdString().c_str());
+    
+    int result = login(uname, pwd);
+    
+    switch(result) {
+        case LOGIN_SUCCESS:
+            qDebug() << "Login success!";
+            user_name = username;
+            emit loginSuccess();
+            break;
+        case LOGGED_IN:
+            qDebug() << "Account already logged in!";
+            emit loggedIn();
+            break;
+        case WRONG_PASSWORD:
+            qDebug() << "Wrong password!";
+            emit wrongPassword();
+            break;
+        case ACCOUNT_NOT_EXIST:
+            qDebug() << "Account does not exist!";
+            emit accountNotExist();
+            break;
+        case ACCOUNT_BLOCKED:
+            qDebug() << "Account is blocked!";
+            emit accountBlocked();
+            break;
+        default:
+            qDebug() << "Unknown error!";
+            break;
+    }
+}
+
+void BackEnd::signUp(QString username, QString password)
+{
+    qDebug() << "Signing up with username: " << username;
+    
+    char uname[256], pwd[256];
+    strcpy(uname, username.toStdString().c_str());
+    strcpy(pwd, password.toStdString().c_str());
+    
+    int result = signup(uname, pwd);
+    
+    switch(result) {
+        case SIGNUP_SUCCESS:
+            qDebug() << "Signup success!";
+            emit signupSuccess();
+            break;
+        case ACCOUNT_EXIST:
+            qDebug() << "Account already exists!";
+            emit accountExist();
+            break;
+        default:
+            qDebug() << "Unknown error!";
+            break;
+    }
+}
+
+void BackEnd::logOut()
+{
+    qDebug() << "Logging out...";
+    logout();
+    user_name = "";
+    emit userNameChanged();
+}
