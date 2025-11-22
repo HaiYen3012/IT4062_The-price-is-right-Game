@@ -320,9 +320,9 @@ sudo systemctl restart mysql
 ## 👥 Team Members
 
 - **Duyên**: Registration system (signup feature)
-- ****: Login system
-- ****: Game logic
-- ****: UI/UX
+- **Yến**: Login system
+- **Nhung**: Game logic
+- **Hà**: UI/UX
 
 ## �📝 License
 
@@ -330,6 +330,7 @@ Dự án môn học IT4062 - Network Programming
 
 ---
 
-**Note**: Dự án hỗ trợ cả Ubuntu Native và WSL2. Xem `DATABASE_SETUP.md` để biết cách setup cho môi trường của bạn.
+**Note**: Dự án hỗ trợ cả Ubuntu Native và WSL2. Xem `DATABASE_SETUP.md` để biết cách setup cho môi trường.
+
 
 
