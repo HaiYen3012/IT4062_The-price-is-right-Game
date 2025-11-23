@@ -27,6 +27,7 @@ public:
 
     Q_INVOKABLE void connectToServer();
     Q_INVOKABLE void disconnectToServer();
+    Q_INVOKABLE void login(QString username, QString password);
     Q_INVOKABLE void signUp(QString username, QString password);
     Q_INVOKABLE void logOut();
 
@@ -36,6 +37,11 @@ signals:
     void connectFail();
     void signupSuccess();
     void accountExist();
+    void loginSuccess();
+    void loggedIn();
+    void accountBlocked();
+    void accountNotExist();
+    void wrongPassword();
 
 private:
     QString user_name;

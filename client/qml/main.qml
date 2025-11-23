@@ -1,5 +1,5 @@
-import QtQuick 2.15
-import QtQuick.Controls 2.15
+import QtQuick 2.12
+import QtQuick.Controls 2.12
 import ThePriceIsRight.BackEnd 1.0
 
 ApplicationWindow {
@@ -23,6 +23,7 @@ ApplicationWindow {
     property string currentAction: "none"
     property bool connectionFailed: false
     property string signupStatus: "none"
+    property string loginStatus: "none"
 
     BackEnd {
         id: backEnd
@@ -43,6 +44,44 @@ ApplicationWindow {
 
         onAccountExist: {
             rootWindow.signupStatus = "ACCOUNT_EXIST"
+        }
+
+        // Login signals
+        onLoginSuccess: {
+            waitPopup.close()
+            rootWindow.loginStatus = "LOGIN_SUCCESS"
+            notifySuccessPopup.popMessage = "Login successful! Welcome " + backEnd.user_name
+            notifySuccessPopup.open()
+            // TODO: Navigate to main menu or game screen
+            // stackView.push("qrc:/qml/MainMenu.qml")
+        }
+
+        onAccountNotExist: {
+            waitPopup.close()
+            rootWindow.loginStatus = "ACCOUNT_NOT_EXIST"
+            notifyErrorPopup.popMessage = "Account does not exist!"
+            notifyErrorPopup.open()
+        }
+
+        onWrongPassword: {
+            waitPopup.close()
+            rootWindow.loginStatus = "WRONG_PASSWORD"
+            notifyErrorPopup.popMessage = "Wrong password! Please try again."
+            notifyErrorPopup.open()
+        }
+
+        onLoggedIn: {
+            waitPopup.close()
+            rootWindow.loginStatus = "LOGGED_IN"
+            notifyErrorPopup.popMessage = "Account is already logged in!"
+            notifyErrorPopup.open()
+        }
+
+        onAccountBlocked: {
+            waitPopup.close()
+            rootWindow.loginStatus = "ACCOUNT_BLOCKED"
+            notifyErrorPopup.popMessage = "Your account has been blocked!"
+            notifyErrorPopup.open()
         }
     }
 

@@ -83,5 +83,6 @@ Client *find_client(int conn_fd);
 
 // Authentication functions
 int handle_signup(char username[BUFF_SIZE], char password[BUFF_SIZE]);
+int handle_login(Client *cli, char username[BUFF_SIZE], char password[BUFF_SIZE]);
 
 #endif
