@@ -30,6 +30,8 @@ public:
     Q_INVOKABLE void login(QString username, QString password);
     Q_INVOKABLE void signUp(QString username, QString password);
     Q_INVOKABLE void logOut();
+    Q_INVOKABLE QString fetchRooms();
+    Q_INVOKABLE QString fetchOnlineUsers();
 
 signals:
     void userNameChanged();

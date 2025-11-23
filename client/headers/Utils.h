@@ -29,6 +29,10 @@ enum msg_type
   CHANGE_PASSWORD,
   SAME_OLD_PASSWORD,
   CHANGE_PASSWORD_SUCCESS,
+  GET_ROOMS,
+  GET_ROOMS_RESULT,
+  GET_ONLINE_USERS,
+  GET_ONLINE_USERS_RESULT,
   LOGOUT
 };
 
@@ -52,5 +56,9 @@ int disconnect_to_server();
 int login(char username[], char password[]);
 int signup(char username[], char password[]);
 int logout();
+// Fetch JSON string of rooms into buffer (returns message type or -1 on error)
+int get_rooms(char buffer[], int bufsize);
+// Fetch JSON string of online users into buffer (returns message type or -1 on error)
+int get_online_users(char buffer[], int bufsize);
 
 #endif /* UTILS_H */

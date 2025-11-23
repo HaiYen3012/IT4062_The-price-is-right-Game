@@ -120,3 +120,23 @@ void BackEnd::logOut()
     user_name = "";
     emit userNameChanged();
 }
+
+Q_INVOKABLE QString BackEnd::fetchRooms()
+{
+    char buf[4096];
+    int res = get_rooms(buf, sizeof(buf));
+    if (res == GET_ROOMS_RESULT) {
+        return QString::fromUtf8(buf);
+    }
+    return QString();
+}
+
+Q_INVOKABLE QString BackEnd::fetchOnlineUsers()
+{
+    char buf[4096];
+    int res = get_online_users(buf, sizeof(buf));
+    if (res == GET_ONLINE_USERS_RESULT) {
+        return QString::fromUtf8(buf);
+    }
+    return QString();
+}

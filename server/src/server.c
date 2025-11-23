@@ -311,11 +311,84 @@ void *handle_client(void *arg)
                 memset(cli->login_account, 0, sizeof(cli->login_account));
                 break;
                 
-            default:
-                printf("[%d] Unhandled message type: %d\n", conn_fd, msg.type);
+            case GET_ROOMS:
+                {
+                    printf("[%d] Client requested room list\n", conn_fd);
+                    pthread_mutex_lock(&mutex);
+                    char q[512];
+                    sprintf(q, "SELECT room_id, room_code, max_players, (SELECT COUNT(*) FROM room_members rm WHERE rm.room_id = r.room_id AND rm.left_at IS NULL) AS current_players FROM rooms r");
+                    if (mysql_query(g_db_conn, q)) {
+                        fprintf(stderr, "MySQL query error: %s\n", mysql_error(g_db_conn));
+                        msg.type = GET_ROOMS_RESULT;
+                        msg.value[0] = '\0';
+                        send(conn_fd, &msg, sizeof(Message), 0);
+                    } else {
+                        MYSQL_RES *res = mysql_store_result(g_db_conn);
+                        MYSQL_ROW row;
+                        char json[BUFF_SIZE];
+                        int first = 1;
+                        strcpy(json, "[");
+                        while ((row = mysql_fetch_row(res)) != NULL) {
+                            if (!first) strcat(json, ","); else first = 0;
+                            char entry[256];
+                            const char *room_id = row[0] ? row[0] : "0";
+                            const char *room_code = row[1] ? row[1] : "";
+                            const char *max_p = row[2] ? row[2] : "0";
+                            const char *cur_p = row[3] ? row[3] : "0";
+                            snprintf(entry, sizeof(entry), "{\"room_id\":%s,\"room_code\":\"%s\",\"players\":\"%s/%s\"}", room_id, room_code, cur_p, max_p);
+                            strcat(json, entry);
+                        }
+                        strcat(json, "]");
+                        mysql_free_result(res);
+                        msg.type = GET_ROOMS_RESULT;
+                        strncpy(msg.value, json, sizeof(msg.value)-1);
+                        msg.value[sizeof(msg.value)-1] = '\0';
+                        send(conn_fd, &msg, sizeof(Message), 0);
+                    }
+                    pthread_mutex_unlock(&mutex);
+                }
                 break;
-            }
-            break;
+                
+            case GET_ONLINE_USERS:
+                {
+                    printf("[%d] Client requested online users\n", conn_fd);
+                    pthread_mutex_lock(&mutex);
+                    char q2[256];
+                    sprintf(q2, "SELECT username FROM users WHERE is_online = 1");
+                    if (mysql_query(g_db_conn, q2)) {
+                        fprintf(stderr, "MySQL query error: %s\n", mysql_error(g_db_conn));
+                        msg.type = GET_ONLINE_USERS_RESULT;
+                        msg.value[0] = '\0';
+                        send(conn_fd, &msg, sizeof(Message), 0);
+                    } else {
+                        MYSQL_RES *res2 = mysql_store_result(g_db_conn);
+                        MYSQL_ROW row2;
+                        char json2[BUFF_SIZE];
+                        int first2 = 1;
+                        strcpy(json2, "[");
+                        while ((row2 = mysql_fetch_row(res2)) != NULL) {
+                            if (!first2) strcat(json2, ","); else first2 = 0;
+                            char entry2[128];
+                            const char *uname = row2[0] ? row2[0] : "";
+                            snprintf(entry2, sizeof(entry2), "\"%s\"", uname);
+                            strcat(json2, entry2);
+                        }
+                        strcat(json2, "]");
+                        mysql_free_result(res2);
+                        msg.type = GET_ONLINE_USERS_RESULT;
+                        strncpy(msg.value, json2, sizeof(msg.value)-1);
+                        msg.value[sizeof(msg.value)-1] = '\0';
+                        send(conn_fd, &msg, sizeof(Message), 0);
+                    }
+                    pthread_mutex_unlock(&mutex);
+                }
+                break;
+                 
+            default:
+                 printf("[%d] Unhandled message type: %d\n", conn_fd, msg.type);
+                 break;
+             }
+             break;
         }
     }
     

@@ -1278,9 +1278,11 @@ compiler_rcc_clean:
 	-$(DEL_FILE) qrc_qml.cpp
 qrc_qml.cpp: resources/qml.qrc \
 		/opt/homebrew/share/qt/libexec/rcc \
+		qml/HomeUser.qml \
 		qml/HomeGuest.qml \
 		qml/RegisterPage.qml \
-		qml/main.qml
+		qml/main.qml \
+		qml/SignInPage.qml
 	/opt/homebrew/share/qt/libexec/rcc -name qml resources/qml.qrc -o qrc_qml.cpp
 
 compiler_moc_predefs_make_all: moc_predefs.h
