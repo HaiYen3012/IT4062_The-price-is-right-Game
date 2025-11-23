@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  server:
+    build: ./server
+    container_name: price_server
+    ports:
+      - "5555:5555"
+    environment:
+      MYSQL_HOST: host.docker.internal
+      MYSQL_USER: root
+      MYSQL_PASSWORD: nganha123@
+      MYSQL_DATABASE: hay_chon_gia_dung
+      MYSQL_PORT: 3306
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
