@@ -41,6 +41,38 @@ int disconnect_to_server()
   return 1;
 }
 
+int login(char username[], char password[])
+{
+  Message msg;
+  msg.type = LOGIN;
+  strcpy(msg.data_type, "string");
+  // Format: username | password
+  strcpy(msg.value, username);
+  strcat(msg.value, " | ");
+  strcat(msg.value, password);
+  msg.length = strlen(msg.value);
+  
+  if (send(sockfd, &msg, sizeof(Message), 0) < 0)
+  {
+    printf("Send failed");
+    return -1;
+  }
+
+  if (recv(sockfd, &msg, sizeof(Message), 0) < 0)
+  {
+    printf("Receive failed");
+    return -1;
+  }
+
+  if (msg.type == LOGIN_SUCCESS)
+  {
+    strcpy(acc.username, username);
+    acc.login_status = 1;
+  }
+
+  return msg.type;
+}
+
 int signup(char username[], char password[])
 {
   Message msg;
