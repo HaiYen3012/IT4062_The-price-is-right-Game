@@ -50,10 +50,11 @@ ApplicationWindow {
         onLoginSuccess: {
             waitPopup.close()
             rootWindow.loginStatus = "LOGIN_SUCCESS"
-            notifySuccessPopup.popMessage = "Login successful! Welcome " + backEnd.user_name
-            notifySuccessPopup.open()
+           // notifySuccessPopup.popMessage = "Login successful! Welcome " + backEnd.user_name
+            //notifySuccessPopup.open()
             // TODO: Navigate to main menu or game screen
             // stackView.push("qrc:/qml/MainMenu.qml")
+            stackView.push("qrc:/qml/RoomV1.qml")
         }
 
         onAccountNotExist: {

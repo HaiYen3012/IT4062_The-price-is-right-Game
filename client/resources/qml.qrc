@@ -4,5 +4,6 @@
         <file alias="qml/HomeGuest.qml">../qml/HomeGuest.qml</file>
         <file alias="qml/SignInPage.qml">../qml/SignInPage.qml</file>
         <file alias="qml/RegisterPage.qml">../qml/RegisterPage.qml</file>
+        <file alias="qml/RoomV1.qml">../qml/RoomV1.qml</file> 
     </qresource>
 </RCC>
