@@ -121,8 +121,16 @@ Page {
         spacing: 30
         z: 1
 
+        Image {
+            id: centerImage
+            source: "qrc:/ui/image.png"
+            width: 220
+            height: 220
+            fillMode: Image.PreserveAspectFit
+            anchors.horizontalCenter: parent.horizontalCenter
+        }
+
         // Game title (simple)
-        Text { text: "HÃY CHỌN GIÁ ĐÚNG"; font.pixelSize: 42; font.bold: true; color: "#FF4444"; horizontalAlignment: Text.AlignHCenter }
 
         Row { spacing: 40; anchors.horizontalCenter: parent.horizontalCenter
 
@@ -162,47 +170,85 @@ Page {
 
             Text { text: "LIST ROOMS"; font.pixelSize: 22; font.bold: true; color: "#0A6EA6"; anchors.horizontalCenter: parent.horizontalCenter }
 
-            // Rooms list
-            ListView {
-                id: roomsList
-                model: ListModel {}
+            // Rooms list (dynamic)
+            Item {
+                id: roomsContainer
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.bottom: joinRow.top
-                clip: true
-                delegate: Rectangle {
-                    width: parent.width; height: 64; radius: 8; color: "#A7BFC6"; border.width: 2; border.color: "#8aa1a8"
-                    Row { anchors.fill: parent; anchors.margins: 8; spacing: 10; anchors.verticalCenter: parent.verticalCenter
-                        Rectangle { width: 48; height: 48; radius: 8; color: "#FFE89C"; border.color: "#B58C00"; Text { anchors.centerIn: parent; text: "🏆" } }
-                        Column { spacing: 2; Text { text: room_code; font.bold: true; color: "#222" } Text { text: players; color: "#eee" } }
-                        Item { Layout.fillWidth: true }
-                        Rectangle { width: 56; height: 40; radius: 10; color: "#FFD54F"; border.color: "#B58C00"
-                            Text { anchors.centerIn: parent; text: "JOIN"; font.bold: true }
-                            MouseArea { anchors.fill: parent; onClicked: { /* join logic */ roomsListPopup.close(); notifySuccessPopup.popMessage = "Bạn đã tham gia " + room_code; notifySuccessPopup.open() } }
-                        }
-                    }
-                }
-                Component.onCompleted: {
-                    if (backend) {
-                        var json = JSON.parse(backend.fetchRooms())
-                        roomsList.model.clear()
-                        for (var i=0;i<json.length;i++) {
-                            roomsList.model.append({ room_id: json[i].room_id, room_code: json[i].room_code, players: json[i].players })
-                        }
-                    }
-                }
-             
-                 Row {
-                     id: joinRow
-                     anchors.horizontalCenter: parent.horizontalCenter
-                     spacing: 40
-                     anchors.bottom: parent.bottom
 
-                     Button { text: "HOME"; onClicked: roomListPopup.close() }
-                     Button { text: "REFRESH"; onClicked: { /* TODO: refresh list */ } }
-                 }
+                ListView {
+                    id: roomsList
+                    anchors.fill: parent
+                    model: ListModel {}
+                    clip: true
+                    delegate: Rectangle {
+                        width: parent.width; height: 78; radius: 10;
+                        gradient: Gradient { GradientStop { position: 0.0; color: "#EAF7FB" } GradientStop { position: 1.0; color: "#DFF5FF" } }
+                        border.width: 1; border.color: "#9CCEF0"; anchors.margins: 6
+
+                        Row { anchors.fill: parent; anchors.margins: 10; spacing: 12; anchors.verticalCenter: parent.verticalCenter
+                            Rectangle { width: 56; height: 56; radius: 8; color: "#FFE89C"; border.color: "#B58C00"; Text { anchors.centerIn: parent; text: "🏆"; font.pixelSize: 18 } }
+
+                            Column { spacing: 6; anchors.verticalCenter: parent.verticalCenter
+                                Text { text: room_code; font.pixelSize: 18; font.bold: true; color: "#0A4C6A" }
+                                Text { text: "Players: " + players; color: "#246"; font.pixelSize: 12 }
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Column { anchors.verticalCenter: parent.verticalCenter; spacing: 6
+                                Button { text: "JOIN"; width: 72; onClicked: { roomsListPopup.close(); notifySuccessPopup.popMessage = "Bạn đã tham gia " + room_code; notifySuccessPopup.open(); } }
+                                Button { text: "DETAILS"; width: 72; onClicked: { /* show details */ } }
+                            }
+                        }
+                    }
+                }
+
+                // Placeholder when no rooms
+                Text {
+                    id: noRoomsText
+                    anchors.centerIn: parent
+                    text: "No available rooms"
+                    visible: roomsList.count === 0
+                    color: "#6A8";
+                }
             }
+
+            Row {
+                id: joinRow
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 24
+                anchors.bottom: parent.bottom
+
+                Button { text: "HOME"; onClicked: roomListPopup.close() }
+                Button { text: "REFRESH"; onClicked: fetchAndPopulateRooms() }
+            }
+
+            // Fetch helper
+            function fetchAndPopulateRooms() {
+                if (!backend) return;
+                var raw = backend.fetchRooms();
+                if (!raw || raw.length === 0) {
+                    roomsList.model.clear();
+                    return;
+                }
+                try {
+                    var arr = JSON.parse(raw);
+                } catch(e) {
+                    console.log("Failed to parse rooms JSON:", e, raw);
+                    roomsList.model.clear();
+                    return;
+                }
+                roomsList.model.clear();
+                for (var i=0; i<arr.length; i++) {
+                    roomsList.model.append({ room_id: arr[i].room_id, room_code: arr[i].room_code, players: arr[i].players });
+                }
+            }
+
+            // Refresh when popup opens
+            onOpened: fetchAndPopulateRooms()
         }
     }
 }

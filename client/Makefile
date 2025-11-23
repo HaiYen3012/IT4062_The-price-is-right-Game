@@ -1278,6 +1278,7 @@ compiler_rcc_clean:
 	-$(DEL_FILE) qrc_qml.cpp
 qrc_qml.cpp: resources/qml.qrc \
 		/opt/homebrew/share/qt/libexec/rcc \
+		../ui/image.png \
 		qml/HomeUser.qml \
 		qml/HomeGuest.qml \
 		qml/RegisterPage.qml \

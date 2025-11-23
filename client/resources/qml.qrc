@@ -5,5 +5,6 @@
         <file alias="qml/RegisterPage.qml">../qml/RegisterPage.qml</file>
         <file alias="qml/SignInPage.qml">../qml/SignInPage.qml</file>
         <file alias="qml/HomeUser.qml">../qml/HomeUser.qml</file>
+        <file alias="ui/image.png">../../ui/image.png</file>
     </qresource>
 </RCC>
