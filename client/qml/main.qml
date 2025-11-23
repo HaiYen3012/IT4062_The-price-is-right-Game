@@ -52,8 +52,8 @@ ApplicationWindow {
             rootWindow.loginStatus = "LOGIN_SUCCESS"
             notifySuccessPopup.popMessage = "Login successful! Welcome " + backEnd.user_name
             notifySuccessPopup.open()
-            // TODO: Navigate to main menu or game screen
-            // stackView.push("qrc:/qml/MainMenu.qml")
+            // Navigate to HomeUser.qml with username property and backend reference
+            stackView.push("qrc:/qml/HomeUser.qml", { userName: backEnd.user_name, backend: backEnd })
         }
 
         onAccountNotExist: {

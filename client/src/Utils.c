@@ -109,3 +109,33 @@ int logout()
   }
   return msg.type;
 }
+
+int get_rooms(char buffer[], int bufsize)
+{
+  Message msg;
+  msg.type = GET_ROOMS;
+  strcpy(msg.data_type, "json");
+  msg.length = 0;
+  if (send(sockfd, &msg, sizeof(Message), 0) < 0) { printf("Send failed\n"); return -1; }
+  if (recv(sockfd, &msg, sizeof(Message), 0) < 0) { printf("Receive failed\n"); return -1; }
+  if (msg.type == GET_ROOMS_RESULT) {
+    strncpy(buffer, msg.value, bufsize-1); buffer[bufsize-1] = '\0';
+    return msg.type;
+  }
+  return msg.type;
+}
+
+int get_online_users(char buffer[], int bufsize)
+{
+  Message msg;
+  msg.type = GET_ONLINE_USERS;
+  strcpy(msg.data_type, "json");
+  msg.length = 0;
+  if (send(sockfd, &msg, sizeof(Message), 0) < 0) { printf("Send failed\n"); return -1; }
+  if (recv(sockfd, &msg, sizeof(Message), 0) < 0) { printf("Receive failed\n"); return -1; }
+  if (msg.type == GET_ONLINE_USERS_RESULT) {
+    strncpy(buffer, msg.value, bufsize-1); buffer[bufsize-1] = '\0';
+    return msg.type;
+  }
+  return msg.type;
+}
