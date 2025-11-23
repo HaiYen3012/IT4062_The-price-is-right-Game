@@ -122,6 +122,74 @@ int handle_signup(char username[], char password[])
     return result;
 }
 
+int handle_login(Client *cli, char username[], char password[])
+{
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    char query[256];
+    int result;
+    
+    printf("Login attempt: username='%s'\n", username);
+    
+    pthread_mutex_lock(&mutex);
+    
+    // Kiểm tra username có tồn tại không (bỏ is_blocked vì không có trong schema)
+    sprintf(query, "SELECT user_id, password_hash, is_online FROM users WHERE username = '%s'", username);
+    
+    if (mysql_query(g_db_conn, query)) {
+        fprintf(stderr, "MySQL query error: %s\n", mysql_error(g_db_conn));
+        pthread_mutex_unlock(&mutex);
+        return ACCOUNT_NOT_EXIST;
+    }
+    
+    res = mysql_store_result(g_db_conn);
+    row = mysql_fetch_row(res);
+    
+    if (row == NULL) {
+        // Account không tồn tại
+        mysql_free_result(res);
+        result = ACCOUNT_NOT_EXIST;
+        printf("Account does not exist: %s\n", username);
+    } else {
+        // Lấy thông tin user
+        // int user_id = atoi(row[0]);
+        char *db_password = row[1];
+        int is_online = atoi(row[2]);
+        
+        mysql_free_result(res);
+        
+        // Kiểm tra account có đang online không
+        if (is_online) {
+            result = LOGGED_IN;
+            printf("Account already logged in: %s\n", username);
+        }
+        // Kiểm tra password
+        else if (strcmp(password, db_password) != 0) {
+            result = WRONG_PASSWORD;
+            printf("Wrong password for: %s\n", username);
+        }
+        // Login thành công
+        else {
+            // Cập nhật is_online = 1
+            sprintf(query, "UPDATE users SET is_online = 1 WHERE username = '%s'", username);
+            if (mysql_query(g_db_conn, query)) {
+                fprintf(stderr, "MySQL update error: %s\n", mysql_error(g_db_conn));
+                result = ACCOUNT_NOT_EXIST;
+            } else {
+                // Cập nhật client info
+                strcpy(cli->login_account, username);
+                cli->login_status = AUTH;
+                result = LOGIN_SUCCESS;
+                printf("Login success: %s\n", username);
+            }
+        }
+    }
+    
+    pthread_mutex_unlock(&mutex);
+    
+    return result;
+}
+
 // ==================== CLIENT HANDLER ====================
 
 void *handle_client(void *arg)
@@ -152,6 +220,40 @@ void *handle_client(void *arg)
         case UN_AUTH:
             switch (msg.type)
             {
+            case LOGIN:
+                {
+                    char username[BUFF_SIZE], password[BUFF_SIZE];
+                    // Parse format: username | password
+                    char *token = strtok(msg.value, "|");
+                    if (token != NULL) {
+                        // Trim leading/trailing spaces
+                        while (*token == ' ') token++;
+                        strcpy(username, token);
+                        // Remove trailing spaces
+                        char *end = username + strlen(username) - 1;
+                        while (end > username && *end == ' ') {
+                            *end = '\0';
+                            end--;
+                        }
+                        
+                        token = strtok(NULL, "|");
+                        if (token != NULL) {
+                            while (*token == ' ') token++;
+                            strcpy(password, token);
+                            end = password + strlen(password) - 1;
+                            while (end > password && *end == ' ') {
+                                *end = '\0';
+                                end--;
+                            }
+                        }
+                    }
+                    
+                    result = handle_login(cli, username, password);
+                    msg.type = result;
+                    send(conn_fd, &msg, sizeof(Message), 0);
+                }
+                break;
+                
             case SIGNUP:
                 {
                     char username[BUFF_SIZE], password[BUFF_SIZE];

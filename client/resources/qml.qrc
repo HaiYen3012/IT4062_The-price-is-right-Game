@@ -2,6 +2,7 @@
     <qresource prefix="/">
         <file alias="qml/main.qml">../qml/main.qml</file>
         <file alias="qml/HomeGuest.qml">../qml/HomeGuest.qml</file>
+        <file alias="qml/SignInPage.qml">../qml/SignInPage.qml</file>
         <file alias="qml/RegisterPage.qml">../qml/RegisterPage.qml</file>
     </qresource>
 </RCC>
