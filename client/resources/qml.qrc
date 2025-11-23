@@ -5,6 +5,12 @@
         <file alias="qml/RegisterPage.qml">../qml/RegisterPage.qml</file>
         <file alias="qml/SignInPage.qml">../qml/SignInPage.qml</file>
         <file alias="qml/HomeUser.qml">../qml/HomeUser.qml</file>
-        <file alias="ui/image.png">../../ui/image.png</file>
+
+        <!-- Sửa 2 dòng này -->
+        <file alias="ui/pic.png">../ui/pic.png</file>
+        <file alias="ui/trophy.png">../ui/trophy.png</file>
+        <file alias="ui/image.png">../../ui/image.png</file> <!-- giữ nguyên vì đang chạy tốt -->
+        <!-- hoặc đẹp hơn nữa (khuyên dùng): copy image.png vào client/ui luôn rồi để -->
+        <!-- <file alias="ui/image.png">ui/image.png</file> -->
     </qresource>
 </RCC>
