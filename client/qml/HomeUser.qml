@@ -143,6 +143,13 @@ Page {
         height: 220
         fillMode: Image.PreserveAspectFit
         anchors.horizontalCenter: parent.horizontalCenter   // thêm dòng này để căn giữa hoàn hảo
+
+            SequentialAnimation on scale {
+                        running: true
+                        loops: Animation.Infinite
+                        NumberAnimation { from: 1.0; to: 1.08; duration: 800; easing.type: Easing.InOutQuad }
+                        NumberAnimation { from: 1.08; to: 1.0; duration: 800; easing.type: Easing.InOutQuad }
+                    }
     }
 
         Row {
