@@ -54,6 +54,7 @@ ApplicationWindow {
             notifySuccessPopup.open()
             // Navigate to HomeUser.qml with username property and backend reference
             stackView.push("qrc:/qml/HomeUser.qml", { userName: backEnd.user_name, backend: backEnd })
+            //stackView.push("qrc:/qml/HomeUser.qml", { userName: backEnd.user_name, backend: backEnd })
         }
 
         onAccountNotExist: {
