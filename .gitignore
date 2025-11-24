@@ -40,7 +40,10 @@ Thumbs.db
 #######################
 build/
 bin/
-client
+client/*.o
+.qmake.stash
+info.plist
+client.app
 debug/
 release/
 *.out
