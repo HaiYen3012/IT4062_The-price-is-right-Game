@@ -160,14 +160,28 @@ Page {
                 width: 160; height: 100; radius: 16; color: orange
                 border.color: "#aa6e00"; border.width: 4
                 Text { anchors.centerIn: parent; text: "CREATE\nROOM"; font.pixelSize: 20; font.bold: true; color: "#fff"; horizontalAlignment: Text.AlignHCenter }
-                MouseArea { anchors.fill: parent; onClicked: { /* TODO: create room */ } }
+                MouseArea { 
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: { 
+                        stackView.push("qrc:/qml/WaitingRoom.qml", { 
+                            roomCode: "ROOM " + Math.floor(Math.random() * 100),
+                            isHost: true,
+                            backend: backend
+                        })
+                    }
+                }
             }
 
             Rectangle {
                 width: 160; height: 100; radius: 16; color: primaryBlue
                 border.color: "#2a85b0"; border.width: 4
                 Text { anchors.centerIn: parent; text: "JOIN\nROOM"; font.pixelSize: 20; font.bold: true; color: "#fff"; horizontalAlignment: Text.AlignHCenter }
-                MouseArea { anchors.fill: parent; onClicked: roomListPopup.open() }
+                MouseArea { 
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: roomListPopup.open()
+                }
             }
         }
     }
@@ -261,10 +275,14 @@ Page {
                             Text { anchors.centerIn: parent; text: "JOIN"; color: "#212121"; font.pixelSize: 20; font.bold: true }
                             MouseArea {
                                 anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     roomListPopup.close()
-                                    notifySuccessPopup.popMessage = "Bạn đã tham gia " + (room_code)
-                                    notifySuccessPopup.open()
+                                    stackView.push("qrc:/qml/WaitingRoom.qml", { 
+                                        roomCode: room_code,
+                                        isHost: false,
+                                        backend: backend
+                                    })
                                 }
                             }
                         }
