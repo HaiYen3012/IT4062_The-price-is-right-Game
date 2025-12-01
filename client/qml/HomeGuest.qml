@@ -311,7 +311,8 @@ Page {
             }
             
             onClicked: {
-                stackView.push("qrc:/qml/RegisterPage.qml")
+                // For quick testing, open Room3 directly
+                stackView.push("qrc:/qml/Room3.qml", { hostName: "Guest-Test" })
             }
             
             scale: registerButton.pressed ? 0.95 : 1.0

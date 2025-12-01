@@ -6,9 +6,10 @@
         <file alias="qml/SignInPage.qml">../qml/SignInPage.qml</file>
         <file alias="qml/HomeUser.qml">../qml/HomeUser.qml</file>
         <file alias="qml/WaitingRoom.qml">../qml/WaitingRoom.qml</file>
-
+        <file alias="qml/Room3.qml">../qml/Room3.qml</file>
         <!-- Sửa 2 dòng này -->
         <file alias="ui/pic.png">../ui/pic.png</file>
+                <file alias="ui/bgroom3.png">../ui/bgroom3.png</file>
         <file alias="ui/trophy.png">../ui/trophy.png</file>
         <file alias="ui/image.png">../../ui/image.png</file> <!-- giữ nguyên vì đang chạy tốt -->
         <!-- hoặc đẹp hơn nữa (khuyên dùng): copy image.png vào client/ui luôn rồi để -->
