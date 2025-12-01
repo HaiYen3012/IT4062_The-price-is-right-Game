@@ -138,7 +138,7 @@ Page {
         z: 1
 
        Image {
-        source: "qrc:/ui/image.png"
+        source: "qrc:/ui/logo.png"
         width: 220
         height: 220
         fillMode: Image.PreserveAspectFit

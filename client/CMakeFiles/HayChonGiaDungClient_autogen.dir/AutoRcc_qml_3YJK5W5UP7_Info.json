@@ -1,0 +1,35 @@
+{
+	"BUILD_DIR" : "/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/HayChonGiaDungClient_autogen",
+	"CMAKE_BINARY_DIR" : "/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client",
+	"CMAKE_CURRENT_BINARY_DIR" : "/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client",
+	"CMAKE_SOURCE_DIR" : "/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client",
+	"GENERATOR" : "Unix Makefiles",
+	"INCLUDE_DIR" : "/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/HayChonGiaDungClient_autogen/include",
+	"INPUTS" : 
+	[
+		"/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/qml/WaitingRoom.qml",
+		"/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/qml/SignInPage.qml",
+		"/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/qml/RoomV1.qml",
+		"/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/qml/HomeUser.qml",
+		"/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/qml/RegisterPage.qml",
+		"/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/qml/HomeGuest.qml",
+		"/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/qml/main.qml",
+		"/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/ui/pic.png",
+		"/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/ui/trophy.png",
+		"/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/ui/logo.png",
+		"/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/ui/user.png",
+		"/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/ui/backgroundR1.png",
+		"/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/ui/correct.png"
+	],
+	"LOCK_FILE" : "/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/CMakeFiles/HayChonGiaDungClient_autogen.dir/AutoRcc_qml_3YJK5W5UP7_Lock.lock",
+	"MULTI_CONFIG" : false,
+	"OPTIONS" : [ "-name", "qml" ],
+	"OUTPUT_CHECKSUM" : "3YJK5W5UP7",
+	"OUTPUT_NAME" : "qrc_qml.cpp",
+	"RCC_EXECUTABLE" : "/usr/lib/qt5/bin/rcc",
+	"RCC_LIST_OPTIONS" : [ "--list" ],
+	"SETTINGS_FILE" : "/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/CMakeFiles/HayChonGiaDungClient_autogen.dir/AutoRcc_qml_3YJK5W5UP7_Used.txt",
+	"SOURCE" : "/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/resources/qml.qrc",
+	"VERBOSITY" : 0
+}

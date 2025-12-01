@@ -1,5 +1,7 @@
 #include "../headers/BackEnd.h"
 #include <QDebug>
+#include <cstring>
+#include <string>
 
 std::string BackEnd::server_ip = "";
 int BackEnd::server_port = 0;

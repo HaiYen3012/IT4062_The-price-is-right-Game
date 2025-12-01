@@ -12,8 +12,8 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
-    BackEnd::server_ip = argv[1];
-    BackEnd::server_port = atoi(argv[2]);
+    BackEnd::server_ip = "127.0.0.1";
+    BackEnd::server_port = 5555;
 
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 

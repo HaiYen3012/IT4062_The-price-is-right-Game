@@ -1,0 +1,5 @@
+/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/CMakeFiles/HayChonGiaDungClient.dir
+/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/CMakeFiles/edit_cache.dir
+/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/CMakeFiles/rebuild_cache.dir
+/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/CMakeFiles/HayChonGiaDungClient_autogen_timestamp_deps.dir
+/mnt/d/tailieuhoctap/2025.1/THLTM/IT4062_The-price-is-right-Game/client/CMakeFiles/HayChonGiaDungClient_autogen.dir

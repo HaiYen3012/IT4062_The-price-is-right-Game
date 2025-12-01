@@ -31,7 +31,7 @@ ApplicationWindow {
         onConnectSuccess: {
             rootWindow.connectionFailed = false
             waitPopup.close()
-            stackView.push("qrc:/qml/HomeGuest.qml")
+            stackView.push("qrc:/qml/RoomV1.qml")
         }
 
         onConnectFail: {

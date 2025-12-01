@@ -5,7 +5,7 @@
 #include <mysql/mysql.h>
 #include <string.h> // thêm để dùng strchr, strcspn
 
-#define DEFAULT_DB_HOST "localhost"
+#define DEFAULT_DB_HOST "127.0.0.1"
 #define DEFAULT_DB_USER "admin"
 #define DEFAULT_DB_PASS "123456"
 #define DEFAULT_DB_NAME "hay_chon_gia_dung"
@@ -68,7 +68,7 @@ int db_init(void) {
 
     const char* socket_path = detect_mysql_socket();
 
-    if (!mysql_real_connect(g_db_conn, db_host, db_user, db_pass, db_name, db_port, (char*)socket_path, 0)) {
+if (!mysql_real_connect(g_db_conn, db_host, db_user, db_pass, db_name, db_port, NULL, 0)) {
         fprintf(stderr, "[DB] mysql_real_connect() failed: %s\n", mysql_error(g_db_conn));
         mysql_close(g_db_conn);
         g_db_conn = NULL;

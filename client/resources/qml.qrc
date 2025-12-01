@@ -6,11 +6,15 @@
         <file alias="qml/SignInPage.qml">../qml/SignInPage.qml</file>
         <file alias="qml/HomeUser.qml">../qml/HomeUser.qml</file>
         <file alias="qml/WaitingRoom.qml">../qml/WaitingRoom.qml</file>
+        <file alias="qml/RoomV1.qml">../qml/RoomV1.qml</file>
 
         <!-- Sửa 2 dòng này -->
         <file alias="ui/pic.png">../ui/pic.png</file>
         <file alias="ui/trophy.png">../ui/trophy.png</file>
-        <file alias="ui/image.png">../../ui/image.png</file> <!-- giữ nguyên vì đang chạy tốt -->
+        <file alias="ui/correct.png">../ui/correct.png</file> <!-- sửa path cho đúng -->
+        <file alias="ui/user.png">../ui/user.png</file>
+        <file alias="ui/logo.png">../ui/logo.png</file>
+        <file alias="ui/backgroundR1.png">../ui/backgroundR1.png</file>
         <!-- hoặc đẹp hơn nữa (khuyên dùng): copy image.png vào client/ui luôn rồi để -->
         <!-- <file alias="ui/image.png">ui/image.png</file> -->
     </qresource>

@@ -1,0 +1,5 @@
+# Hashes of file build rules.
+f41b687b8f45e58367e90686c819a594 CMakeFiles/HayChonGiaDungClient_autogen
+f41b687b8f45e58367e90686c819a594 CMakeFiles/HayChonGiaDungClient_autogen_timestamp_deps
+cd0b668ceeea079873869a456ad68e80 HayChonGiaDungClient_autogen/3YJK5W5UP7/qrc_qml.cpp
+98e09d736abcca47ee2e15375d298131 HayChonGiaDungClient_autogen/timestamp
