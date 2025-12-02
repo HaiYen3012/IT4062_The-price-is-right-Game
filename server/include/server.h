@@ -42,7 +42,55 @@ enum msg_type
   GET_ROOMS_RESULT,
   GET_ONLINE_USERS,
   GET_ONLINE_USERS_RESULT,
-  LOGOUT
+  LOGOUT,
+  LOGOUT_SUCCESS,
+  HEARTBEAT,
+  HEARTBEAT_ACK,
+  ASYNC_CONNECT,
+  ASYNC_CONNECT_SUCCESS,
+  CREATE_ROOM,
+  CREATE_ROOM_SUCCESS,
+  CREATE_ROOM_FAIL,
+  JOIN_ROOM,
+  JOIN_ROOM_SUCCESS,
+  JOIN_ROOM_FAIL,
+  ROOM_FULL,
+  LEAVE_ROOM,
+  LEAVE_ROOM_SUCCESS,
+  GET_ROOM_INFO,
+  GET_ROOM_INFO_RESULT,
+  UPDATE_ROOM_STATE,
+  INVITE_USER,
+  INVITE_SUCCESS,
+  INVITE_FAIL,
+  INVITE_NOTIFY,
+  INVITE_RESPONSE,
+  READY_TOGGLE,
+  READY_UPDATE,
+  START_GAME,
+  START_GAME_SUCCESS,
+  START_GAME_FAIL,
+  GAME_START,
+  GAME_START_NOTIFY,
+  ROUND_INFO,
+  ROUND_ANSWER,
+  ROUND_RESULT,
+  PLAYER_FORFEIT,
+  PLAYER_FORFEIT_NOTIFY,
+  GAME_END,
+  MATCH_LOG_EVENT,
+  STATS_REQUEST,
+  STATS_RESPONSE,
+  REPLAY_LIST_REQUEST,
+  REPLAY_LIST_RESULT,
+  REPLAY_GET_REQUEST,
+  REPLAY_EVENT,
+  CHAT_ROOM_SEND,
+  CHAT_ROOM_BROADCAST,
+  SPECTATE_JOIN,
+  SPECTATE_JOIN_RESULT,
+  SYSTEM_NOTICE,
+  SYSTEM_ERROR
 };
 
 enum login_status
@@ -65,7 +113,10 @@ typedef struct _client
 {
   char login_account[BUFF_SIZE];
   int conn_fd;
+  int async_conn_fd;  // async socket for notifications (-1 if not set)
   int login_status; // UN_AUTH or AUTH
+  int room_id;      // current room (0 if not in room)
+  int is_ready;     // ready status in room (0 or 1)
   struct _client *next;
 } Client;
 
@@ -88,5 +139,17 @@ Client *find_client(int conn_fd);
 // Authentication functions
 int handle_signup(char username[BUFF_SIZE], char password[BUFF_SIZE]);
 int handle_login(Client *cli, char username[BUFF_SIZE], char password[BUFF_SIZE]);
+int handle_async_connect(int conn_fd, char username[BUFF_SIZE]);
+
+// Room management functions
+int handle_create_room(Client *cli, char room_code[BUFF_SIZE]);
+int handle_join_room(Client *cli, char room_code[BUFF_SIZE]);
+int handle_leave_room(Client *cli);
+int handle_invite_user(Client *cli, char target_username[BUFF_SIZE]);
+int handle_invite_response(Client *cli, int invitation_id, int accept);
+int handle_ready_toggle(Client *cli);
+int handle_start_game(Client *cli);
+void broadcast_room_state(int room_id);
+void send_invite_notification(int to_user_id, int from_user_id, int room_id, int invitation_id);
 
 #endif
