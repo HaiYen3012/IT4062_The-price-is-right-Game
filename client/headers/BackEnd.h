@@ -32,6 +32,14 @@ public:
     Q_INVOKABLE void logOut();
     Q_INVOKABLE QString fetchRooms();
     Q_INVOKABLE QString fetchOnlineUsers();
+    Q_INVOKABLE void createRoom(QString roomCode);
+    Q_INVOKABLE void joinRoom(QString roomCode);
+    Q_INVOKABLE void leaveRoom();
+    Q_INVOKABLE void inviteUser(QString username);
+    Q_INVOKABLE void inviteResponse(int invitationId, bool accept);
+    Q_INVOKABLE void readyToggle();
+    Q_INVOKABLE void startGame();
+    Q_INVOKABLE QString getRoomInfo();
 
 signals:
     void userNameChanged();
@@ -44,6 +52,19 @@ signals:
     void accountBlocked();
     void accountNotExist();
     void wrongPassword();
+    void createRoomSuccess();
+    void createRoomFail();
+    void joinRoomSuccess();
+    void joinRoomFail();
+    void roomFull();
+    void leaveRoomSuccess();
+    void updateRoomState(QString data);
+    void inviteSuccess();
+    void inviteFail();
+    void inviteNotify(int invitationId, QString fromUser, QString roomCode);
+    void readyUpdate();
+    void startGameSuccess();
+    void startGameFail();
 
 private:
     QString user_name;
