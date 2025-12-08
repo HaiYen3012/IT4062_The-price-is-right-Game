@@ -20,6 +20,107 @@ Page {
     property var playerScores: []
     property string correctAnswer: ""
     property bool showResult: false
+    property bool isResetting: false  // Flag to prevent multiple updates during reset
+    
+    // Button colors - stored as properties to prevent re-evaluation
+    property string colorA_top: "#3B82F6"
+    property string colorA_bottom: "#2563EB"
+    property string colorB_top: "#3B82F6"
+    property string colorB_bottom: "#2563EB"
+    property string colorC_top: "#3B82F6"
+    property string colorC_bottom: "#2563EB"
+    property string colorD_top: "#3B82F6"
+    property string colorD_bottom: "#2563EB"
+    
+    // Function to update button colors
+    function updateButtonColors() {
+        console.log("=== UPDATE COLORS ===");
+        console.log("selectedAnswer:", selectedAnswer);
+        console.log("showResult:", showResult);
+        console.log("correctAnswer:", correctAnswer);
+        
+        // Reset all to blue first
+        colorA_top = "#3B82F6";
+        colorA_bottom = "#2563EB";
+        colorB_top = "#3B82F6";
+        colorB_bottom = "#2563EB";
+        colorC_top = "#3B82F6";
+        colorC_bottom = "#2563EB";
+        colorD_top = "#3B82F6";
+        colorD_bottom = "#2563EB";
+        
+        // If nothing selected, keep all blue
+        if (selectedAnswer === "") {
+            console.log("No answer selected, all blue");
+            return;
+        }
+        
+        // Determine colors for selected answer
+        var topColor, bottomColor;
+        
+        if (!showResult) {
+            // Yellow when selected
+            topColor = "#FBBF24";
+            bottomColor = "#F59E0B";
+            console.log("Selected but no result yet -> YELLOW");
+        } else {
+            // Check if correct
+            if (correctAnswer === selectedAnswer) {
+                // Green when correct
+                topColor = "#10B981";
+                bottomColor = "#059669";
+                console.log("Selected and CORRECT -> GREEN");
+            } else {
+                // Red when wrong
+                topColor = "#DC2626";
+                bottomColor = "#991B1B";
+                console.log("Selected and WRONG -> RED");
+            }
+        }
+        
+        // Apply color to selected button only
+        if (selectedAnswer === "A") {
+            colorA_top = topColor;
+            colorA_bottom = bottomColor;
+            console.log("Applied color to button A");
+        } else if (selectedAnswer === "B") {
+            colorB_top = topColor;
+            colorB_bottom = bottomColor;
+            console.log("Applied color to button B");
+        } else if (selectedAnswer === "C") {
+            colorC_top = topColor;
+            colorC_bottom = bottomColor;
+            console.log("Applied color to button C");
+        } else if (selectedAnswer === "D") {
+            colorD_top = topColor;
+            colorD_bottom = bottomColor;
+            console.log("Applied color to button D");
+        }
+        console.log("===================");
+    }
+    
+    // Watch for changes
+    onSelectedAnswerChanged: {
+        if (isResetting) return;  // Skip during reset
+        console.log("selectedAnswer changed to:", selectedAnswer);
+        updateButtonColors();
+    }
+    onShowResultChanged: {
+        if (isResetting) return;  // Skip during reset
+        console.log("showResult changed to:", showResult);
+        if (showResult) {
+            // Only update when result is shown, not when it's hidden
+            updateButtonColors();
+        }
+    }
+    onCorrectAnswerChanged: {
+        if (isResetting) return;  // Skip during reset
+        console.log("correctAnswer changed to:", correctAnswer);
+        if (showResult) {
+            // Only update if we're showing results
+            updateButtonColors();
+        }
+    }
     
     Component.onCompleted: {
         console.log("Round1Room loaded, backend:", backend);
@@ -55,14 +156,26 @@ Page {
         console.log("Option C:", optC);
         console.log("Option D:", optD);
         
-        // Reset all states first (important to reset before assigning new values)
-        showResult = false;
+        // Stop timer first
+        countdownTimer.running = false;
+        
+        // Set resetting flag to prevent multiple color updates
+        isResetting = true;
+        
+        // Reset all states in correct order to prevent UI jumping
         answered = false;
-        selectedAnswer = "";
+        showResult = false;
         correctAnswer = "";
+        selectedAnswer = "";
         playerScores = [];
         
-        // Then assign new question data
+        // Clear resetting flag
+        isResetting = false;
+        
+        // Now manually reset colors once
+        updateButtonColors();
+        
+        // Assign new question data
         currentRoundId = roundId;
         currentQuestion = question;
         round1Room.optionA = optA;
@@ -74,7 +187,7 @@ Page {
         console.log("After assignment - optionA:", round1Room.optionA);
         console.log("After assignment - optionC:", round1Room.optionC);
         
-        // Start countdown timer immediately
+        // Start countdown timer after everything is set
         countdownTimer.running = true;
     }
     
@@ -82,10 +195,25 @@ Page {
         console.log("Result received:", resultData);
         try {
             var result = JSON.parse(resultData);
+            
+            // Stop timer
+            countdownTimer.running = false;
+            
+            // Set resetting flag to batch updates
+            isResetting = true;
+            
+            // Update result data
             correctAnswer = result.correct;
             playerScores = result.players;
             showResult = true;
-            countdownTimer.running = false;
+            
+            // Clear flag
+            isResetting = false;
+            
+            // Now update colors once with correct data
+            console.log("Result applied - correct:", correctAnswer, "selected:", selectedAnswer);
+            updateButtonColors();
+            
         } catch (e) {
             console.error("Failed to parse result:", e);
         }
@@ -372,29 +500,11 @@ Page {
                 gradient: Gradient {
                     GradientStop { 
                         position: 0.0
-                        color: {
-                            // When showing results
-                            if (showResult) {
-                                if (correctAnswer === "A") return "#10B981"; // Correct answer = Green
-                                if (selectedAnswer === "A" && correctAnswer !== "A") return "#DC2626"; // Wrong answer = Red
-                                return "#3B82F6"; // Other buttons = Blue
-                            }
-                            // Before showing results
-                            if (selectedAnswer === "A") return "#FBBF24"; // Selected = Yellow
-                            return "#3B82F6"; // Default = Blue
-                        }
+                        color: colorA_top
                     }
                     GradientStop { 
                         position: 1.0
-                        color: {
-                            if (showResult) {
-                                if (correctAnswer === "A") return "#059669";
-                                if (selectedAnswer === "A" && correctAnswer !== "A") return "#991B1B";
-                                return "#2563EB";
-                            }
-                            if (selectedAnswer === "A") return "#F59E0B";
-                            return "#2563EB";
-                        }
+                        color: colorA_bottom
                     }
                 }
                 
@@ -470,27 +580,11 @@ Page {
                 gradient: Gradient {
                     GradientStop { 
                         position: 0.0
-                        color: {
-                            if (showResult) {
-                                if (correctAnswer === "B") return "#10B981";
-                                if (selectedAnswer === "B" && correctAnswer !== "B") return "#DC2626";
-                                return "#3B82F6";
-                            }
-                            if (selectedAnswer === "B") return "#FBBF24";
-                            return "#3B82F6";
-                        }
+                        color: colorB_top
                     }
                     GradientStop { 
                         position: 1.0
-                        color: {
-                            if (showResult) {
-                                if (correctAnswer === "B") return "#059669";
-                                if (selectedAnswer === "B" && correctAnswer !== "B") return "#991B1B";
-                                return "#2563EB";
-                            }
-                            if (selectedAnswer === "B") return "#F59E0B";
-                            return "#2563EB";
-                        }
+                        color: colorB_bottom
                     }
                 }
                 
@@ -566,27 +660,11 @@ Page {
                 gradient: Gradient {
                     GradientStop { 
                         position: 0.0
-                        color: {
-                            if (showResult) {
-                                if (correctAnswer === "C") return "#10B981";
-                                if (selectedAnswer === "C" && correctAnswer !== "C") return "#DC2626";
-                                return "#3B82F6";
-                            }
-                            if (selectedAnswer === "C") return "#FBBF24";
-                            return "#3B82F6";
-                        }
+                        color: colorC_top
                     }
                     GradientStop { 
                         position: 1.0
-                        color: {
-                            if (showResult) {
-                                if (correctAnswer === "C") return "#059669";
-                                if (selectedAnswer === "C" && correctAnswer !== "C") return "#991B1B";
-                                return "#2563EB";
-                            }
-                            if (selectedAnswer === "C") return "#F59E0B";
-                            return "#2563EB";
-                        }
+                        color: colorC_bottom
                     }
                 }
                 
@@ -662,27 +740,11 @@ Page {
                 gradient: Gradient {
                     GradientStop { 
                         position: 0.0
-                        color: {
-                            if (showResult) {
-                                if (correctAnswer === "D") return "#10B981";
-                                if (selectedAnswer === "D" && correctAnswer !== "D") return "#DC2626";
-                                return "#3B82F6";
-                            }
-                            if (selectedAnswer === "D") return "#FBBF24";
-                            return "#3B82F6";
-                        }
+                        color: colorD_top
                     }
                     GradientStop { 
                         position: 1.0
-                        color: {
-                            if (showResult) {
-                                if (correctAnswer === "D") return "#059669";
-                                if (selectedAnswer === "D" && correctAnswer !== "D") return "#991B1B";
-                                return "#2563EB";
-                            }
-                            if (selectedAnswer === "D") return "#F59E0B";
-                            return "#2563EB";
-                        }
+                        color: colorD_bottom
                     }
                 }
                 
@@ -766,30 +828,42 @@ Page {
                 
                 // Correct Answer Badge
                 Rectangle {
-                    Layout.preferredWidth: 120
+                    Layout.preferredWidth: 150
                     Layout.fillHeight: true
                     color: "#10B981"
                     radius: 8
+                    border.color: "#059669"
+                    border.width: 3
                     
                     ColumnLayout {
                         anchors.centerIn: parent
-                        spacing: 2
+                        spacing: 5
                         
                         Text {
-                            text: "CORRECT"
-                            font.pixelSize: 10
+                            text: "✓ CORRECT ANSWER"
+                            font.pixelSize: 12
                             font.bold: true
                             color: "white"
                             Layout.alignment: Qt.AlignHCenter
                         }
                         
-                        Text {
-                            text: correctAnswer
-                            font.pixelSize: 28
-                            font.bold: true
+                        Rectangle {
+                            Layout.preferredWidth: 60
+                            Layout.preferredHeight: 60
+                            radius: 30
                             color: "white"
+                            border.color: "#059669"
+                            border.width: 3
                             Layout.alignment: Qt.AlignHCenter
-                            font.family: "Arial Black"
+                            
+                            Text {
+                                anchors.centerIn: parent
+                                text: correctAnswer
+                                font.pixelSize: 36
+                                font.bold: true
+                                color: "#10B981"
+                                font.family: "Arial Black"
+                            }
                         }
                     }
                 }

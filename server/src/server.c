@@ -1836,16 +1836,21 @@ void broadcast_question_result(int room_id, int round_id)
         mysql_free_result(res);
     }
     
-    // Get all players' scores for this round
+    // Get all players' TOTAL cumulative scores (sum of all rounds in this match)
     sprintf(query, 
-        "SELECT u.username, COALESCE(ra.score_awarded, 0) AS score, COALESCE(ra.is_correct, 0) AS is_correct "
+        "SELECT u.username, "
+        "COALESCE(SUM(ra_all.score_awarded), 0) AS total_score, "
+        "COALESCE(ra_current.is_correct, 0) AS is_correct "
         "FROM room_members rm "
         "JOIN users u ON rm.user_id = u.user_id "
         "JOIN rounds r ON r.round_id = %d "
         "JOIN matches m ON r.match_id = m.match_id AND m.room_id = rm.room_id "
-        "LEFT JOIN round_answers ra ON ra.round_id = r.round_id AND ra.user_id = u.user_id "
+        "LEFT JOIN round_answers ra_current ON ra_current.round_id = r.round_id AND ra_current.user_id = u.user_id "
+        "LEFT JOIN rounds r_all ON r_all.match_id = m.match_id "
+        "LEFT JOIN round_answers ra_all ON ra_all.round_id = r_all.round_id AND ra_all.user_id = u.user_id "
         "WHERE rm.left_at IS NULL "
-        "ORDER BY score DESC", round_id);
+        "GROUP BY u.user_id, u.username, ra_current.is_correct "
+        "ORDER BY total_score DESC", round_id);
     
     char result_json[BUFF_SIZE] = "{\"correct\":\"";
     strcat(result_json, correct_answer);
