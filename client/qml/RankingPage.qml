@@ -10,6 +10,10 @@ Page {
     property var backend: null
     property var rankings: []
     
+    Component.onCompleted: {
+        console.log("RankingPage loaded with", rankings.length, "players");
+    }
+    
     // Animated gradient background
     Rectangle {
         anchors.fill: parent
@@ -208,33 +212,6 @@ Page {
                                 }
                             }
                         }
-                    }
-                    
-                    // Scale animation on appear
-                    scale: 0
-                    opacity: 0
-                    Component.onCompleted: {
-                        scaleAnim.start()
-                        opacityAnim.start()
-                    }
-                    
-                    NumberAnimation {
-                        id: scaleAnim
-                        target: parent
-                        property: "scale"
-                        from: 0
-                        to: 1
-                        duration: 500
-                        easing.type: Easing.OutBack
-                    }
-                    
-                    NumberAnimation {
-                        id: opacityAnim
-                        target: parent
-                        property: "opacity"
-                        from: 0
-                        to: 1
-                        duration: 500
                     }
                 }
             }
