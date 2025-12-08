@@ -358,11 +358,33 @@ int get_room_info(char buffer[], int bufsize)
   if (send(sockfd, &msg, sizeof(Message), 0) < 0) { printf("Send failed\n"); return -1; }
   if (recv(sockfd, &msg, sizeof(Message), 0) < 0) { printf("Receive failed\n"); return -1; }
   if (msg.type == GET_ROOM_INFO_RESULT) {
-    strncpy(buffer, msg.value, bufsize-1); buffer[bufsize-1] = '\0';
-    return msg.type;
+    strncpy(buffer, msg.value, bufsize);
+    buffer[bufsize-1] = '\0';
   }
   return msg.type;
 }
+
+// ==================== ROUND 1 FUNCTIONS ====================
+
+int submit_answer(int round_id, char answer_choice[])
+{
+  Message msg;
+  msg.type = ANSWER_SUBMIT;
+  strcpy(msg.data_type, "string");
+  
+  // Format: round_id|answer_choice
+  sprintf(msg.value, "%d|%s", round_id, answer_choice);
+  msg.length = strlen(msg.value);
+  
+  if (send(sockfd, &msg, sizeof(Message), 0) < 0) {
+    printf("Send failed\n");
+    return -1;
+  }
+  
+  return ANSWER_SUBMIT;
+}
+
+// ==================== MESSAGE LISTENER ====================
 
 // Message listener thread - uses async_sockfd
 void *message_listener_thread(void *arg)

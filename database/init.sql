@@ -67,7 +67,22 @@ CREATE TABLE invitations (
 ) ENGINE=InnoDB;
 
 -- =========================================================
--- 3. PRODUCTS (SẢN PHẨM DÙNG CHO V1–V4)
+-- 3. QUESTIONS (CÂU HỎI TRẮC NGHIỆM CHO ROUND 1)
+-- =========================================================
+
+CREATE TABLE questions (
+    question_id   INT AUTO_INCREMENT PRIMARY KEY,
+    question_text TEXT NOT NULL,
+    option_a      VARCHAR(255) NOT NULL,
+    option_b      VARCHAR(255) NOT NULL,
+    option_c      VARCHAR(255) NOT NULL,
+    option_d      VARCHAR(255) NOT NULL,
+    correct_answer ENUM('A','B','C','D') NOT NULL,
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =========================================================
+-- 4. PRODUCTS (SẢN PHẨM DÙNG CHO V1–V4)
 -- =========================================================
 
 CREATE TABLE products (
@@ -80,7 +95,7 @@ CREATE TABLE products (
 );
 
 -- =========================================================
--- 4. MATCHES & ROUNDS (V1–V4)
+-- 5. MATCHES & ROUNDS (V1–V4)
 -- =========================================================
 
 CREATE TABLE matches (
@@ -89,6 +104,7 @@ CREATE TABLE matches (
     started_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ended_at       DATETIME NULL,
     winner_user_id INT NULL,
+    current_round  INT NOT NULL DEFAULT 0,
     CONSTRAINT fk_matches_room
         FOREIGN KEY (room_id) REFERENCES rooms(room_id)
         ON DELETE CASCADE,
@@ -100,16 +116,23 @@ CREATE TABLE matches (
 CREATE TABLE rounds (
     round_id       INT AUTO_INCREMENT PRIMARY KEY,
     match_id       INT NOT NULL,
-    round_type     ENUM('V1','V2','V3','V4') NOT NULL,
+    round_number   INT NOT NULL DEFAULT 1,
+    round_type     ENUM('ROUND1','V1','V2','V3','V4') NOT NULL,
+    question_id    INT NULL,
     time_limit_sec INT NOT NULL DEFAULT 15,
-    threshold_pct  DECIMAL(5,2) NULL,                 -- dùng cho V4 (chênh không quá X%)
-       CONSTRAINT fk_rounds_match
+    threshold_pct  DECIMAL(5,2) NULL,
+    started_at     DATETIME NULL,
+    ended_at       DATETIME NULL,
+    CONSTRAINT fk_rounds_match
         FOREIGN KEY (match_id) REFERENCES matches(match_id)
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_rounds_question
+        FOREIGN KEY (question_id) REFERENCES questions(question_id)
+        ON DELETE SET NULL
 );
 
 -- =========================================================
--- 5. ROUND_PRODUCTS (SẢN PHẨM TRONG MỖI VÒNG)
+-- 6. ROUND_PRODUCTS (SẢN PHẨM TRONG MỖI VÒNG)
 -- =========================================================
 
 CREATE TABLE round_products (
@@ -127,19 +150,20 @@ CREATE TABLE round_products (
 ); 
 
 -- =========================================================
--- 6. ROUND_ANSWERS (KẾT QUẢ TRẢ LỜI THEO VÒNG)
+-- 7. ROUND_ANSWERS (KẾT QUẢ TRẢ LỜI THEO VÒNG)
 -- =========================================================
 
 CREATE TABLE round_answers (
     answer_id           INT AUTO_INCREMENT PRIMARY KEY,
     round_id            INT NOT NULL,
     user_id             INT NOT NULL,
+    answer_choice       VARCHAR(50) NULL, -- ROUND1: A/B/C/D, V3: ô quay
     answer_price        INT NULL,         -- V1, V4
     answer_order_json   JSON NULL,        -- V2: thứ tự sản phẩm
-    answer_choice       VARCHAR(50) NULL, -- V3: ô quay, vùng chọn...
     is_correct          TINYINT(1) NOT NULL DEFAULT 0,
     score_awarded       INT NOT NULL DEFAULT 0,
     time_ms             INT NOT NULL DEFAULT 0,
+    answer_timestamp    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_eliminated_after TINYINT(1) NOT NULL DEFAULT 0,
     created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_round_answers_round
@@ -153,7 +177,7 @@ CREATE TABLE round_answers (
 );
 
 -- =========================================================
--- 7. MATCH_EVENTS (LOG & REPLAY)
+-- 8. MATCH_EVENTS (LOG & REPLAY)
 -- =========================================================
 
 CREATE TABLE match_events (
@@ -176,7 +200,7 @@ CREATE TABLE match_events (
 );
 
 -- =========================================================
--- 8. VIEW THỐNG KÊ NGƯỜI CHƠI (UC33)
+-- 9. VIEW THỐNG KÊ NGƯỜI CHƠI (UC33)
 -- =========================================================
 CREATE OR REPLACE VIEW user_stats AS
 SELECT 
