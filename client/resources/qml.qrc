@@ -6,6 +6,7 @@
         <file alias="qml/SignInPage.qml">../qml/SignInPage.qml</file>
         <file alias="qml/HomeUser.qml">../qml/HomeUser.qml</file>
         <file alias="qml/WaitingRoom.qml">../qml/WaitingRoom.qml</file>
+        <file alias="qml/Round1Room.qml">../qml/Round1Room.qml</file>
 
         <!-- Sửa 2 dòng này -->
         <file alias="ui/pic.png">../ui/pic.png</file>

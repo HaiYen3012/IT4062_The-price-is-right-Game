@@ -75,6 +75,9 @@ enum msg_type
   ROUND_INFO,
   ROUND_ANSWER,
   ROUND_RESULT,
+  QUESTION_START,
+  ANSWER_SUBMIT,
+  QUESTION_RESULT,
   PLAYER_FORFEIT,
   PLAYER_FORFEIT_NOTIFY,
   GAME_END,
@@ -151,5 +154,12 @@ int handle_ready_toggle(Client *cli);
 int handle_start_game(Client *cli);
 void broadcast_room_state(int room_id);
 void send_invite_notification(int to_user_id, int from_user_id, int room_id, int invitation_id);
+
+// Round 1 game functions
+void *game_round_handler(void *arg);
+void *start_round1_thread(void *arg);
+void start_round1(int room_id);
+int handle_answer_submit(Client *cli, char answer[]);
+void broadcast_question_result(int room_id, int round_id);
 
 #endif

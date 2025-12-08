@@ -40,6 +40,7 @@ public:
     Q_INVOKABLE void readyToggle();
     Q_INVOKABLE void startGame();
     Q_INVOKABLE QString getRoomInfo();
+    Q_INVOKABLE void submitAnswer(int roundId, QString answer);
 
 signals:
     void userNameChanged();
@@ -65,6 +66,8 @@ signals:
     void readyUpdate();
     void startGameSuccess();
     void startGameFail();
+    void questionStart(int roundId, QString question, QString optionA, QString optionB, QString optionC, QString optionD);
+    void questionResult(QString resultData);
 
 private:
     QString user_name;

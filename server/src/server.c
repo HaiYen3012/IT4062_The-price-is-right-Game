@@ -521,6 +521,21 @@ void *handle_client(void *arg)
                     result = handle_start_game(cli);
                     msg.type = result;
                     send(conn_fd, &msg, sizeof(Message), 0);
+                    
+                    // If game started successfully, start Round 1 in a separate thread
+                    if (result == START_GAME_SUCCESS) {
+                        pthread_t round_thread;
+                        int *proom_id = malloc(sizeof(int));
+                        *proom_id = cli->room_id;
+                        pthread_create(&round_thread, NULL, start_round1_thread, proom_id);
+                    }
+                }
+                break;
+                
+            case ANSWER_SUBMIT:
+                {
+                    result = handle_answer_submit(cli, msg.value);
+                    // Result is broadcasted to all players after all answers or timeout
                 }
                 break;
                 
@@ -1313,9 +1328,39 @@ int handle_start_game(Client *cli)
     sprintf(query, "UPDATE rooms SET status = 'PLAYING' WHERE room_id = %d", cli->room_id);
     mysql_query(g_db_conn, query);
     
+    // Broadcast GAME_START_NOTIFY to all players in room
+    Message notify_msg;
+    notify_msg.type = GAME_START_NOTIFY;
+    strcpy(notify_msg.value, "Game is starting!");
+    
+    Client *tmp = head_client;
+    while (tmp != NULL) {
+        if (tmp->room_id == cli->room_id && tmp->login_status == AUTH) {
+            int target_fd = (tmp->async_conn_fd >= 0) ? tmp->async_conn_fd : tmp->conn_fd;
+            send(target_fd, &notify_msg, sizeof(Message), 0);
+            printf("Sent GAME_START_NOTIFY to %s (fd=%d)\n", tmp->login_account, target_fd);
+        }
+        tmp = tmp->next;
+    }
+    
+    int room_id = cli->room_id;
     pthread_mutex_unlock(&mutex);
     
-    printf("[%d] Game started in room %d\n", cli->conn_fd, cli->room_id);
+    printf("[%d] Game started in room %d\n", cli->conn_fd, room_id);
+    
+    // Create a thread to handle the game round (so it doesn't block the client thread)
+    pthread_t game_thread;
+    int *room_id_ptr = malloc(sizeof(int));
+    *room_id_ptr = room_id;
+    
+    if (pthread_create(&game_thread, NULL, game_round_handler, room_id_ptr) != 0) {
+        fprintf(stderr, "Failed to create game thread\n");
+        free(room_id_ptr);
+        return START_GAME_FAIL;
+    }
+    
+    pthread_detach(game_thread);
+    
     return START_GAME_SUCCESS;
 }
 
@@ -1426,6 +1471,376 @@ void send_invite_notification(int to_user_id, int from_user_id, int room_id, int
         } else {
             mysql_free_result(res);
         }
+    }
+    
+    pthread_mutex_unlock(&mutex);
+}
+
+// ==================== ROUND 1 GAME LOGIC ====================
+
+// Game round handler thread - waits for clients to be ready then starts Round 1
+void *game_round_handler(void *arg)
+{
+    int room_id = *((int *)arg);
+    free(arg);
+    
+    // Wait 2 seconds for clients to navigate to Round1Room and connect signals
+    printf("Waiting 2 seconds for clients in room %d to be ready...\n", room_id);
+    sleep(2);
+    
+    // Start Round 1
+    printf("Starting Round 1 for room %d\n", room_id);
+    start_round1(room_id);
+    
+    return NULL;
+}
+
+// Thread wrapper for start_round1
+void *start_round1_thread(void *arg)
+{
+    pthread_detach(pthread_self());
+    int room_id = *((int *)arg);
+    free(arg);
+    
+    start_round1(room_id);
+    return NULL;
+}
+
+void start_round1(int room_id)
+{
+    pthread_mutex_lock(&mutex);
+    
+    printf("Starting Round 1 for room %d\n", room_id);
+    
+    // Get match_id for this room
+    char query[1024];
+    sprintf(query, "SELECT match_id FROM matches WHERE room_id = %d AND ended_at IS NULL ORDER BY match_id DESC LIMIT 1", room_id);
+    
+    int match_id = 0;
+    if (mysql_query(g_db_conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(g_db_conn);
+        MYSQL_ROW row = mysql_fetch_row(res);
+        if (row != NULL) {
+            match_id = atoi(row[0]);
+        }
+        mysql_free_result(res);
+    }
+    
+    // If no active match, create one
+    if (match_id == 0) {
+        sprintf(query, "INSERT INTO matches (room_id, current_round) VALUES (%d, 1)", room_id);
+        if (mysql_query(g_db_conn, query) == 0) {
+            match_id = mysql_insert_id(g_db_conn);
+            printf("Created new match: %d for room %d\n", match_id, room_id);
+        }
+    }
+    
+    if (match_id == 0) {
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
+    
+    // Get random question from database
+    sprintf(query, "SELECT question_id, question_text, option_a, option_b, option_c, option_d, correct_answer FROM questions ORDER BY RAND() LIMIT 1");
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        fprintf(stderr, "Failed to get question: %s\n", mysql_error(g_db_conn));
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
+    
+    MYSQL_RES *res = mysql_store_result(g_db_conn);
+    MYSQL_ROW row = mysql_fetch_row(res);
+    
+    if (row == NULL) {
+        mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
+    
+    int question_id = atoi(row[0]);
+    char *question_text = row[1];
+    char *option_a = row[2];
+    char *option_b = row[3];
+    char *option_c = row[4];
+    char *option_d = row[5];
+    char *correct_answer = row[6];
+    
+    // Create round in database
+    sprintf(query, "INSERT INTO rounds (match_id, round_number, round_type, question_id, time_limit_sec, started_at) VALUES (%d, 1, 'ROUND1', %d, 15, NOW())", 
+            match_id, question_id);
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        fprintf(stderr, "Failed to create round: %s\n", mysql_error(g_db_conn));
+        mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
+    
+    int round_id = mysql_insert_id(g_db_conn);
+    printf("Created Round 1 (id=%d) for match %d\n", round_id, match_id);
+    
+    // Prepare message to broadcast
+    Message msg;
+    msg.type = QUESTION_START;
+    
+    // Format: round_id|question_text|option_a|option_b|option_c|option_d
+    sprintf(msg.value, "%d|%s|%s|%s|%s|%s", round_id, question_text, option_a, option_b, option_c, option_d);
+    
+    mysql_free_result(res);
+    
+    // Broadcast to all players in room
+    Client *tmp = head_client;
+    while (tmp != NULL) {
+        if (tmp->room_id == room_id && tmp->login_status == AUTH) {
+            int target_fd = (tmp->async_conn_fd >= 0) ? tmp->async_conn_fd : tmp->conn_fd;
+            send(target_fd, &msg, sizeof(Message), 0);
+            printf("Sent QUESTION_START to %s (fd=%d)\n", tmp->login_account, target_fd);
+        }
+        tmp = tmp->next;
+    }
+    
+    pthread_mutex_unlock(&mutex);
+    
+    // Wait for answers with periodic checking (max 15 seconds)
+    printf("Waiting for answers (max 15 seconds)...\n");
+    
+    for (int i = 0; i < 15; i++) {
+        sleep(1);
+        
+        // Check if all players have answered (for logging only)
+        pthread_mutex_lock(&mutex);
+        
+        char check_query[1024];
+        sprintf(check_query, 
+            "SELECT COUNT(DISTINCT rm.user_id) AS total_players, "
+            "COUNT(DISTINCT ra.user_id) AS answered_players "
+            "FROM rounds r "
+            "JOIN matches m ON r.match_id = m.match_id "
+            "JOIN room_members rm ON m.room_id = rm.room_id AND rm.left_at IS NULL "
+            "LEFT JOIN round_answers ra ON r.round_id = ra.round_id "
+            "WHERE r.round_id = %d", round_id);
+        
+        if (mysql_query(g_db_conn, check_query) == 0) {
+            MYSQL_RES *check_res = mysql_store_result(g_db_conn);
+            MYSQL_ROW check_row = mysql_fetch_row(check_res);
+            
+            if (check_row != NULL) {
+                int total_players = atoi(check_row[0]);
+                int answered_players = atoi(check_row[1]);
+                
+                printf("Progress: %d/%d players answered (after %d seconds)\n", 
+                       answered_players, total_players, i + 1);
+            }
+            mysql_free_result(check_res);
+        }
+        
+        pthread_mutex_unlock(&mutex);
+    }
+    
+    printf("Time's up! Broadcasting results after 15 seconds.\n");
+    
+    // Broadcast results
+    broadcast_question_result(room_id, round_id);
+}
+
+int handle_answer_submit(Client *cli, char answer[])
+{
+    pthread_mutex_lock(&mutex);
+    
+    // Parse: round_id|answer_choice (A/B/C/D)
+    int round_id;
+    char answer_choice[10];
+    
+    if (sscanf(answer, "%d|%s", &round_id, answer_choice) != 2) {
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
+    
+    printf("[%d] Answer submitted for round %d: %s\n", cli->conn_fd, round_id, answer_choice);
+    
+    // Get user_id
+    char query[1024];
+    sprintf(query, "SELECT user_id FROM users WHERE username = '%s'", cli->login_account);
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
+    
+    MYSQL_RES *res = mysql_store_result(g_db_conn);
+    MYSQL_ROW row = mysql_fetch_row(res);
+    
+    if (row == NULL) {
+        mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
+    
+    int user_id = atoi(row[0]);
+    mysql_free_result(res);
+    
+    // Check if already answered
+    sprintf(query, "SELECT answer_id FROM round_answers WHERE round_id = %d AND user_id = %d", round_id, user_id);
+    
+    if (mysql_query(g_db_conn, query) == 0) {
+        res = mysql_store_result(g_db_conn);
+        row = mysql_fetch_row(res);
+        
+        if (row != NULL) {
+            // Already answered
+            mysql_free_result(res);
+            pthread_mutex_unlock(&mutex);
+            return SYSTEM_ERROR;
+        }
+        mysql_free_result(res);
+    }
+    
+    // Get round start time and correct answer
+    sprintf(query, "SELECT r.started_at, q.correct_answer FROM rounds r JOIN questions q ON r.question_id = q.question_id WHERE r.round_id = %d", round_id);
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
+    
+    res = mysql_store_result(g_db_conn);
+    row = mysql_fetch_row(res);
+    
+    if (row == NULL) {
+        mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
+    
+    char *started_at = row[0];
+    char *correct_answer = row[1];
+    mysql_free_result(res);
+    
+    // Calculate elapsed time in milliseconds
+    sprintf(query, "SELECT TIMESTAMPDIFF(MICROSECOND, '%s', NOW()) / 1000", started_at);
+    
+    int time_ms = 0;
+    if (mysql_query(g_db_conn, query) == 0) {
+        res = mysql_store_result(g_db_conn);
+        row = mysql_fetch_row(res);
+        if (row != NULL) {
+            time_ms = atoi(row[0]);
+        }
+        mysql_free_result(res);
+    }
+    
+    // Check if answer is correct
+    int is_correct = (strcmp(answer_choice, correct_answer) == 0) ? 1 : 0;
+    
+    // Calculate score
+    int score_awarded = 0;
+    if (is_correct) {
+        int base_score = 100;
+        int max_time = 15000; // 15 seconds in ms
+        int elapsed_time = time_ms;
+        
+        // Clamp elapsed time to max_time
+        if (elapsed_time > max_time) elapsed_time = max_time;
+        
+        // Speed bonus: (max_time - elapsed_time) / max_time * 100
+        int speed_bonus = ((max_time - elapsed_time) * 100) / max_time;
+        
+        score_awarded = base_score + speed_bonus;
+    }
+    
+    printf("Answer: %s, Correct: %s, Time: %dms, Score: %d\n", 
+           answer_choice, correct_answer, time_ms, score_awarded);
+    
+    // Save answer to database
+    sprintf(query, "INSERT INTO round_answers (round_id, user_id, answer_choice, is_correct, score_awarded, time_ms, answer_timestamp) VALUES (%d, %d, '%s', %d, %d, %d, NOW())",
+            round_id, user_id, answer_choice, is_correct, score_awarded, time_ms);
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        fprintf(stderr, "Failed to save answer: %s\n", mysql_error(g_db_conn));
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
+    
+    pthread_mutex_unlock(&mutex);
+    
+    printf("[%d] Answer saved successfully\n", cli->conn_fd);
+    
+    return ANSWER_SUBMIT;
+}
+
+void broadcast_question_result(int room_id, int round_id)
+{
+    pthread_mutex_lock(&mutex);
+    
+    printf("Broadcasting question result for round %d in room %d\n", round_id, room_id);
+    
+    // Mark round as ended
+    char query[2048];
+    sprintf(query, "UPDATE rounds SET ended_at = NOW() WHERE round_id = %d AND ended_at IS NULL", round_id);
+    mysql_query(g_db_conn, query);
+    
+    // Get correct answer
+    sprintf(query, "SELECT q.correct_answer FROM rounds r JOIN questions q ON r.question_id = q.question_id WHERE r.round_id = %d", round_id);
+    
+    char correct_answer[10] = "";
+    if (mysql_query(g_db_conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(g_db_conn);
+        MYSQL_ROW row = mysql_fetch_row(res);
+        if (row != NULL) {
+            strcpy(correct_answer, row[0]);
+        }
+        mysql_free_result(res);
+    }
+    
+    // Get all players' scores for this round
+    sprintf(query, 
+        "SELECT u.username, COALESCE(ra.score_awarded, 0) AS score, COALESCE(ra.is_correct, 0) AS is_correct "
+        "FROM room_members rm "
+        "JOIN users u ON rm.user_id = u.user_id "
+        "JOIN rounds r ON r.round_id = %d "
+        "JOIN matches m ON r.match_id = m.match_id AND m.room_id = rm.room_id "
+        "LEFT JOIN round_answers ra ON ra.round_id = r.round_id AND ra.user_id = u.user_id "
+        "WHERE rm.left_at IS NULL "
+        "ORDER BY score DESC", round_id);
+    
+    char result_json[BUFF_SIZE] = "{\"correct\":\"";
+    strcat(result_json, correct_answer);
+    strcat(result_json, "\",\"players\":[");
+    
+    if (mysql_query(g_db_conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(g_db_conn);
+        MYSQL_ROW row;
+        int first = 1;
+        
+        while ((row = mysql_fetch_row(res)) != NULL) {
+            if (!first) strcat(result_json, ",");
+            first = 0;
+            
+            char player_json[256];
+            sprintf(player_json, "{\"username\":\"%s\",\"score\":%s,\"is_correct\":%s}", 
+                    row[0], row[1], row[2]);
+            strcat(result_json, player_json);
+        }
+        
+        mysql_free_result(res);
+    }
+    
+    strcat(result_json, "]}");
+    
+    // Broadcast result to all players in room
+    Message msg;
+    msg.type = QUESTION_RESULT;
+    strcpy(msg.value, result_json);
+    
+    Client *tmp = head_client;
+    while (tmp != NULL) {
+        if (tmp->room_id == room_id && tmp->login_status == AUTH) {
+            int target_fd = (tmp->async_conn_fd >= 0) ? tmp->async_conn_fd : tmp->conn_fd;
+            send(target_fd, &msg, sizeof(Message), 0);
+            printf("Sent QUESTION_RESULT to %s (fd=%d)\n", tmp->login_account, target_fd);
+        }
+        tmp = tmp->next;
     }
     
     pthread_mutex_unlock(&mutex);

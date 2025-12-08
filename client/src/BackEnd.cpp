@@ -22,6 +22,72 @@ static void message_callback_wrapper(Message msg)
         else if (msg.type == UPDATE_ROOM_STATE) {
             emit BackEnd::instance->updateRoomState(QString::fromUtf8(msg.value));
         }
+        else if (msg.type == GAME_START_NOTIFY) {
+            qDebug() << "Game starting notification received!";
+            emit BackEnd::instance->startGameSuccess();
+        }
+        else if (msg.type == QUESTION_START) {
+            // Parse: round_id|question_text|option_a|option_b|option_c|option_d
+            qDebug() << "QUESTION_START received, raw data:" << msg.value;
+            
+            int round_id;
+            char question[512], opt_a[256], opt_b[256], opt_c[256], opt_d[256];
+            
+            // Make a copy for parsing
+            char buffer[2048];
+            strncpy(buffer, msg.value, sizeof(buffer) - 1);
+            buffer[sizeof(buffer) - 1] = '\0';
+            
+            // Use strtok on the copy
+            char *token = strtok(buffer, "|");
+            if (token) {
+                round_id = atoi(token);
+                qDebug() << "Round ID:" << round_id;
+                
+                token = strtok(NULL, "|");
+                if (token) {
+                    strcpy(question, token);
+                    qDebug() << "Question:" << question;
+                }
+                
+                token = strtok(NULL, "|");
+                if (token) {
+                    strcpy(opt_a, token);
+                    qDebug() << "Option A:" << opt_a;
+                }
+                
+                token = strtok(NULL, "|");
+                if (token) {
+                    strcpy(opt_b, token);
+                    qDebug() << "Option B:" << opt_b;
+                }
+                
+                token = strtok(NULL, "|");
+                if (token) {
+                    strcpy(opt_c, token);
+                    qDebug() << "Option C:" << opt_c;
+                }
+                
+                token = strtok(NULL, "|");
+                if (token) {
+                    strcpy(opt_d, token);
+                    qDebug() << "Option D:" << opt_d;
+                }
+                
+                qDebug() << "Emitting questionStart signal...";
+                emit BackEnd::instance->questionStart(round_id,
+                    QString::fromUtf8(question),
+                    QString::fromUtf8(opt_a),
+                    QString::fromUtf8(opt_b),
+                    QString::fromUtf8(opt_c),
+                    QString::fromUtf8(opt_d));
+            } else {
+                qDebug() << "ERROR: Failed to parse QUESTION_START!";
+            }
+        }
+        else if (msg.type == QUESTION_RESULT) {
+            emit BackEnd::instance->questionResult(QString::fromUtf8(msg.value));
+        }
     }
 }
 
@@ -320,4 +386,20 @@ QString BackEnd::getRoomInfo()
         return QString::fromUtf8(buf);
     }
     return QString();
+}
+
+void BackEnd::submitAnswer(int roundId, QString answer)
+{
+    qDebug() << "Submitting answer for round" << roundId << ":" << answer;
+    
+    char ans[10];
+    strcpy(ans, answer.toStdString().c_str());
+    
+    int result = submit_answer(roundId, ans);
+    
+    if (result == ANSWER_SUBMIT) {
+        qDebug() << "Answer submitted successfully!";
+    } else {
+        qDebug() << "Failed to submit answer!";
+    }
 }

@@ -67,7 +67,23 @@ VALUES
   (2, 2, 2, 4, 'ACCEPTED', NOW(), NOW());      -- mời Yến, đã accept
 
 -- =========================================================
--- 5. PRODUCTS (SẢN PHẨM DÙNG CHO V1–V4)
+-- 5. QUESTIONS (CÂU HỎI TRẮC NGHIỆM CHO ROUND 1)
+-- =========================================================
+INSERT INTO questions (question_id, question_text, option_a, option_b, option_c, option_d, correct_answer, created_at)
+VALUES
+  (1, 'Chiếc tủ lạnh Samsung Inverter 236L có giá bao nhiêu?', '6.990.000đ', '8.990.000đ', '10.990.000đ', '12.990.000đ', 'B', NOW()),
+  (2, 'Bộ bàn ăn gỗ cao cấp 6 ghế giá là bao nhiêu?', '3.500.000đ', '5.500.000đ', '7.500.000đ', '9.500.000đ', 'C', NOW()),
+  (3, 'Xe máy Honda Vision 2024 có giá bao nhiêu?', '28.990.000đ', '30.990.000đ', '32.990.000đ', '34.990.000đ', 'D', NOW()),
+  (4, 'Smart TV Samsung 43 inch 4K có giá bao nhiêu?', '7.990.000đ', '9.990.000đ', '11.990.000đ', '13.990.000đ', 'A', NOW()),
+  (5, 'Máy giặt LG Inverter 9kg giá là bao nhiêu?', '5.990.000đ', '7.990.000đ', '9.990.000đ', '11.990.000đ', 'B', NOW()),
+  (6, 'Điện thoại iPhone 15 Pro Max 256GB có giá bao nhiêu?', '29.990.000đ', '32.990.000đ', '34.990.000đ', '36.990.000đ', 'C', NOW()),
+  (7, 'Laptop Dell Inspiron 15 core i5 giá là bao nhiêu?', '13.990.000đ', '15.990.000đ', '17.990.000đ', '19.990.000đ', 'B', NOW()),
+  (8, 'Nồi cơm điện cao tần Hitachi 1.8L có giá bao nhiêu?', '2.990.000đ', '3.990.000đ', '4.990.000đ', '5.990.000đ', 'C', NOW()),
+  (9, 'Máy lạnh Daikin Inverter 1.5HP giá là bao nhiêu?', '10.990.000đ', '12.990.000đ', '14.990.000đ', '16.990.000đ', 'A', NOW()),
+  (10, 'Bộ sofa da thật 3 chỗ ngồi có giá bao nhiêu?', '12.990.000đ', '15.990.000đ', '18.990.000đ', '21.990.000đ', 'D', NOW());
+
+-- =========================================================
+-- 6. PRODUCTS (SẢN PHẨM DÙNG CHO V1–V4)
 -- =========================================================
 INSERT INTO products (product_id, name, description, image_url, base_price, created_at)
 VALUES
@@ -78,33 +94,33 @@ VALUES
   (5, 'Tủ lạnh mini',       'Tủ lạnh mini 90L',                  NULL, 3200000, NOW());
 
 -- =========================================================
--- 6. MATCHES
+-- 7. MATCHES
 -- =========================================================
 -- match 1: đã hoàn thành ở ROOM01, winner là Nhung (user_id=1)
 -- match 2: vừa start ở ROOM02, chưa kết thúc
-INSERT INTO matches (match_id, room_id, started_at, ended_at, winner_user_id)
+INSERT INTO matches (match_id, room_id, started_at, ended_at, winner_user_id, current_round)
 VALUES
-  (1, 1, NOW() - INTERVAL 1 DAY, NOW() - INTERVAL 1 DAY + INTERVAL 10 MINUTE, 1),
-  (2, 2, NOW(), NULL, NULL);
+  (1, 1, NOW() - INTERVAL 1 DAY, NOW() - INTERVAL 1 DAY + INTERVAL 10 MINUTE, 1, 0),
+  (2, 2, NOW(), NULL, NULL, 0);
 
 -- =========================================================
--- 7. ROUNDS
+-- 8. ROUNDS
 -- =========================================================
 -- Match 1 có 3 vòng:
 --   Round 1: V1 - đoán giá
 --   Round 2: V2 - xếp rẻ -> đắt
 --   Round 3: V4 - đoán giá, không lệch quá X%
-INSERT INTO rounds (round_id, match_id, round_type, time_limit_sec, threshold_pct)
+INSERT INTO rounds (round_id, match_id, round_number, round_type, question_id, time_limit_sec, threshold_pct, started_at, ended_at)
 VALUES
-  (1, 1, 'V1', 20, NULL),
-  (2, 1, 'V2', 25, NULL),
-  (3, 1, 'V4', 30, 10.00),    -- lệch không quá 10%
+  (1, 1, 1, 'V1', NULL, 20, NULL, NULL, NULL),
+  (2, 1, 2, 'V2', NULL, 25, NULL, NULL, NULL),
+  (3, 1, 3, 'V4', NULL, 30, 10.00, NULL, NULL),
 
 -- Match 2 mới tạo, chưa chơi: tạo sẵn 1 round V1
-  (4, 2, 'V1', 20, NULL);
+  (4, 2, 1, 'V1', NULL, 20, NULL, NULL, NULL);
 
 -- =========================================================
--- 8. ROUND_PRODUCTS
+-- 9. ROUND_PRODUCTS
 -- =========================================================
 -- Round 1 (V1): 1 sản phẩm (Nồi cơm điện)
 INSERT INTO round_products (round_product_id, round_id, product_id, display_order, correct_rank)
@@ -129,7 +145,7 @@ VALUES
   (6, 4, 1, 1, NULL);
 
 -- =========================================================
--- 9. ROUND_ANSWERS
+-- 10. ROUND_ANSWERS
 -- =========================================================
 -- Round 1 (V1): đoán giá Nồi cơm điện (giá đúng 1.200.000)
 INSERT INTO round_answers (
@@ -168,7 +184,7 @@ INSERT INTO round_answers (
 -- (có thể để trống round_answers cho round 4)
 
 -- =========================================================
--- 10. MATCH_EVENTS (LOG & REPLAY)
+-- 11. MATCH_EVENTS (LOG & REPLAY)
 -- =========================================================
 INSERT INTO match_events (
     event_id, match_id, round_id, user_id,

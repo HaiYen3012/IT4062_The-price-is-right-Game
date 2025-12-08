@@ -66,6 +66,9 @@ enum msg_type
   ROUND_INFO,
   ROUND_ANSWER,
   ROUND_RESULT,
+  QUESTION_START,
+  ANSWER_SUBMIT,
+  QUESTION_RESULT,
   PLAYER_FORFEIT,
   PLAYER_FORFEIT_NOTIFY,
   GAME_END,
@@ -121,6 +124,8 @@ int invite_response(int invitation_id, int accept);
 int ready_toggle();
 int start_game();
 int get_room_info(char buffer[], int bufsize);
+// Round 1 functions
+int submit_answer(int round_id, char answer_choice[]);
 // Message listener
 void set_message_callback(MessageCallback callback);
 void start_message_listener();
