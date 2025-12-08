@@ -33,7 +33,55 @@ enum msg_type
   GET_ROOMS_RESULT,
   GET_ONLINE_USERS,
   GET_ONLINE_USERS_RESULT,
-  LOGOUT
+  LOGOUT,
+  LOGOUT_SUCCESS,
+  HEARTBEAT,
+  HEARTBEAT_ACK,
+  ASYNC_CONNECT,
+  ASYNC_CONNECT_SUCCESS,
+  CREATE_ROOM,
+  CREATE_ROOM_SUCCESS,
+  CREATE_ROOM_FAIL,
+  JOIN_ROOM,
+  JOIN_ROOM_SUCCESS,
+  JOIN_ROOM_FAIL,
+  ROOM_FULL,
+  LEAVE_ROOM,
+  LEAVE_ROOM_SUCCESS,
+  GET_ROOM_INFO,
+  GET_ROOM_INFO_RESULT,
+  UPDATE_ROOM_STATE,
+  INVITE_USER,
+  INVITE_SUCCESS,
+  INVITE_FAIL,
+  INVITE_NOTIFY,
+  INVITE_RESPONSE,
+  READY_TOGGLE,
+  READY_UPDATE,
+  START_GAME,
+  START_GAME_SUCCESS,
+  START_GAME_FAIL,
+  GAME_START,
+  GAME_START_NOTIFY,
+  ROUND_INFO,
+  ROUND_ANSWER,
+  ROUND_RESULT,
+  PLAYER_FORFEIT,
+  PLAYER_FORFEIT_NOTIFY,
+  GAME_END,
+  MATCH_LOG_EVENT,
+  STATS_REQUEST,
+  STATS_RESPONSE,
+  REPLAY_LIST_REQUEST,
+  REPLAY_LIST_RESULT,
+  REPLAY_GET_REQUEST,
+  REPLAY_EVENT,
+  CHAT_ROOM_SEND,
+  CHAT_ROOM_BROADCAST,
+  SPECTATE_JOIN,
+  SPECTATE_JOIN_RESULT,
+  SYSTEM_NOTICE,
+  SYSTEM_ERROR
 };
 
 typedef struct _message
@@ -50,9 +98,13 @@ typedef struct _account
   int login_status; // 0: not login; 1: logged in
 } Account;
 
+// Callback for async messages
+typedef void (*MessageCallback)(Message msg);
+
 /*--------------------- Function Declaration -------------------------*/
 int connect_to_server(char ip[], int port);
 int disconnect_to_server();
+int register_async_socket(char username[]);
 int login(char username[], char password[]);
 int signup(char username[], char password[]);
 int logout();
@@ -60,5 +112,18 @@ int logout();
 int get_rooms(char buffer[], int bufsize);
 // Fetch JSON string of online users into buffer (returns message type or -1 on error)
 int get_online_users(char buffer[], int bufsize);
+// Room management
+int create_room(char room_code[]);
+int join_room(char room_code[]);
+int leave_room();
+int invite_user(char username[]);
+int invite_response(int invitation_id, int accept);
+int ready_toggle();
+int start_game();
+int get_room_info(char buffer[], int bufsize);
+// Message listener
+void set_message_callback(MessageCallback callback);
+void start_message_listener();
+void stop_message_listener();
 
 #endif /* UTILS_H */

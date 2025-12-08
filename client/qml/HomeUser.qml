@@ -12,9 +12,95 @@ Page {
     property color orange: "#F4A800"
     property string userName: ""
     property var backend: null
+    property string pendingRoomCode: ""
+
+    function refreshOnlineUsers() {
+        if (!backend) return;
+        try {
+            var json = JSON.parse(backend.fetchOnlineUsers());
+            onlineList.model.clear();
+            for (var i = 0; i < json.length; i++) {
+                onlineList.model.append({ displayName: json[i] });
+            }
+        } catch (e) {
+            console.error("Failed to refresh online users:", e);
+        }
+    }
+
+    function refreshRoomsList() {
+        if (!backend) return;
+        try {
+            var json = JSON.parse(backend.fetchRooms());
+            roomsList.model.clear();
+            for (var i = 0; i < json.length; i++) {
+                roomsList.model.append({
+                    room_code: json[i].room_code,
+                    players: json[i].players
+                });
+            }
+        } catch (e) {
+            console.error("Failed to refresh rooms:", e);
+        }
+    }
+
+    Timer {
+        id: refreshTimer
+        interval: 2000
+        running: true
+        repeat: true
+        onTriggered: {
+            refreshOnlineUsers();
+            refreshRoomsList();
+        }
+    }
 
     Component.onCompleted: {
         if (userName === "" && backend) userName = backend.user_name
+        
+        // Initial load
+        refreshOnlineUsers();
+        refreshRoomsList();
+        
+        if (backend) {
+            backend.createRoomSuccess.connect(function() {
+                stackView.push("qrc:/qml/WaitingRoom.qml", { 
+                    roomCode: pendingRoomCode,
+                    isHost: true,
+                    backend: backend
+                })
+            })
+            
+            backend.createRoomFail.connect(function() {
+                notifyErrorPopup.popMessage = "Failed to create room!"
+                notifyErrorPopup.open()
+            })
+            
+            backend.joinRoomSuccess.connect(function() {
+                roomListPopup.close()
+                stackView.push("qrc:/qml/WaitingRoom.qml", { 
+                    roomCode: pendingRoomCode,
+                    isHost: false,
+                    backend: backend
+                })
+            })
+            
+            backend.joinRoomFail.connect(function() {
+                notifyErrorPopup.popMessage = "Failed to join room!"
+                notifyErrorPopup.open()
+            })
+            
+            backend.roomFull.connect(function() {
+                notifyErrorPopup.popMessage = "Room is full!"
+                notifyErrorPopup.open()
+            })
+            
+            backend.inviteNotify.connect(function(invitationId, fromUser, roomCode) {
+                invitePopup.invitationId = invitationId
+                invitePopup.fromUser = fromUser
+                invitePopup.roomCode = roomCode
+                invitePopup.open()
+            })
+        }
     }
 
     // Background sunburst
@@ -107,29 +193,40 @@ Page {
             anchors.top: parent.top
             anchors.topMargin: 10
             anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
-            Rectangle { width: 110; height: 32; radius: 12; color: primaryBlue; Text { anchors.centerIn: parent; text: "Online"; color: "#fff"; font.bold: true } }
-            // Sample online users
-            ListView {
-                id: onlineList
-                model: ListModel {}
-                width: parent.width
-                height: 200
-                delegate: Rectangle { width: parent.width; height: 40; color: "transparent"; Row { anchors.fill: parent; anchors.margins: 4; spacing: 8; Image { source: "qrc:/ui/pic.png"; width: 28; height: 28 } Text { text: displayName; color: "#222" } } }
-                Component.onCompleted: {
-                    if (backend) {
-                        var json = JSON.parse(backend.fetchOnlineUsers())
-                        onlineList.model.clear()
-                        for (var i=0;i<json.length;i++) {
-                            onlineList.model.append({ displayName: json[i] })
-                        }
-                    }
-                }
-            }
-        }
-    }
-  
-
+            spacing: 8
+            Rectangle { width: 110; height: 32; radius: 12; color: primaryBlue; Text { anchors.centerIn: parent; text: "Online"; color: "#fff"; font.bold: true } }
+            // Online users list
+            ListView {
+                id: onlineList
+                model: ListModel {
+                    id: onlineUsersModel
+                }
+                width: parent.width
+                height: 200
+                clip: true
+                delegate: Rectangle { 
+                    width: onlineList.width
+                    height: 40
+                    color: "transparent"
+                    Row { 
+                        anchors.fill: parent
+                        anchors.margins: 4
+                        spacing: 8
+                        Image { 
+                            source: "qrc:/ui/pic.png"
+                            width: 28
+                            height: 28
+                        }
+                        Text { 
+                            text: displayName || ""
+                            color: "#222"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+                }
+            }
+        }
+    }
     // Center Controls
     Column {
         anchors.horizontalCenter: parent.horizontalCenter
@@ -164,11 +261,10 @@ Page {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: { 
-                        stackView.push("qrc:/qml/WaitingRoom.qml", { 
-                            roomCode: "ROOM " + Math.floor(Math.random() * 100),
-                            isHost: true,
-                            backend: backend
-                        })
+                        pendingRoomCode = "ROOM" + Math.floor(Math.random() * 1000)
+                        if (backend) {
+                            backend.createRoom(pendingRoomCode)
+                        }
                     }
                 }
             }
@@ -235,7 +331,9 @@ Page {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
-                model: ListModel {}
+                model: ListModel {
+                    id: roomsListModel
+                }
                 spacing: 14
 
                 delegate: Rectangle {
@@ -277,12 +375,11 @@ Page {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    roomListPopup.close()
-                                    stackView.push("qrc:/qml/WaitingRoom.qml", { 
-                                        roomCode: room_code,
-                                        isHost: false,
-                                        backend: backend
-                                    })
+                                    // Không đóng popup ngay, chờ kết quả từ server
+                                    pendingRoomCode = room_code
+                                    if (backend) {
+                                        backend.joinRoom(room_code)
+                                    }
                                 }
                             }
                         }
@@ -290,17 +387,26 @@ Page {
                 }
 
                 Component.onCompleted: {
+                    refreshRoomsList()
+                }
+                
+                function refreshRoomsList() {
                     if (backend) {
                         try {
-                            var json = JSON.parse(backend.fetchRooms())
-                            roomsList.model.clear()
-                            for (var i = 0; i < json.length; i++) {
-                                roomsList.model.append({
-                                    room_code: json[i].room_code,
-                                    players: (json[i].current_players || json[i].players) + " / 4"
-                                })
+                            var result = backend.fetchRooms()
+                            if (result && result !== "") {
+                                var json = JSON.parse(result)
+                                roomsList.model.clear()
+                                for (var i = 0; i < json.length; i++) {
+                                    roomsList.model.append({
+                                        room_code: json[i].room_code,
+                                        players: json[i].players
+                                    })
+                                }
                             }
-                        } catch (e) { console.log("Lỗi load rooms:", e) }
+                        } catch (e) { 
+                            console.log("Error loading rooms:", e, "Data:", result) 
+                        }
                     }
                 }
             }
@@ -323,18 +429,7 @@ Page {
                     contentItem: Text { text: parent.text; color: "white"; font: parent.font; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     background: Rectangle { radius: 30; color: "#29B6F6"; implicitWidth: 180; implicitHeight: 60 }
                     onClicked: {
-                        if (backend) {
-                            try {
-                                var json = JSON.parse(backend.fetchRooms())
-                                roomsList.model.clear()
-                                for (var i = 0; i < json.length; i++) {
-                                    roomsList.model.append({
-                                        room_code: json[i].room_code,
-                                        players: (json[i].current_players || json[i].players) + " / 4"
-                                    })
-                                }
-                            } catch (e) { console.log("Refresh failed:", e) }
-                        }
+                        roomsList.refreshRoomsList()
                     }
                 }
             }
@@ -356,6 +451,133 @@ Page {
             color: "white"
             font.pixelSize: 18
             font.bold: true
+        }
+    }
+    
+    Popup {
+        id: notifyErrorPopup
+        property string popMessage: ""
+        x: (parent.width - 320) / 2
+        y: 100
+        width: 320; height: 100
+        modal: true
+        background: Rectangle { color: "#FF5252"; radius: 16 }
+        Text {
+            anchors.centerIn: parent
+            text: notifyErrorPopup.popMessage
+            color: "white"
+            font.pixelSize: 18
+            font.bold: true
+        }
+        Timer {
+            interval: 2000
+            running: notifyErrorPopup.visible
+            onTriggered: notifyErrorPopup.close()
+        }
+    }
+    
+    // Invite Popup
+    Popup {
+        id: invitePopup
+        property int invitationId: 0
+        property string fromUser: ""
+        property string roomCode: ""
+        
+        x: (parent.width - 400) / 2
+        y: (parent.height - 200) / 2
+        width: 400
+        height: 200
+        modal: true
+        closePolicy: Popup.NoAutoClose
+        
+        background: Rectangle {
+            color: "#FFFFFF"
+            radius: 16
+            border.color: "#5FC8FF"
+            border.width: 3
+        }
+        
+        Column {
+            anchors.centerIn: parent
+            spacing: 20
+            
+            Text {
+                text: invitePopup.fromUser + " invited you to join"
+                font.pixelSize: 18
+                font.bold: true
+                color: "#333"
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            
+            Text {
+                text: "Room: " + invitePopup.roomCode
+                font.pixelSize: 16
+                color: "#5FC8FF"
+                font.bold: true
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            
+            Row {
+                spacing: 20
+                anchors.horizontalCenter: parent.horizontalCenter
+                
+                Rectangle {
+                    width: 120
+                    height: 50
+                    radius: 25
+                    color: "#4CAF50"
+                    border.color: "#388E3C"
+                    border.width: 2
+                    
+                    Text {
+                        anchors.centerIn: parent
+                        text: "ACCEPT"
+                        color: "white"
+                        font.pixelSize: 16
+                        font.bold: true
+                    }
+                    
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (backend) {
+                                pendingRoomCode = invitePopup.roomCode
+                                backend.inviteResponse(invitePopup.invitationId, true)
+                            }
+                            invitePopup.close()
+                        }
+                    }
+                }
+                
+                Rectangle {
+                    width: 120
+                    height: 50
+                    radius: 25
+                    color: "#FF5252"
+                    border.color: "#D32F2F"
+                    border.width: 2
+                    
+                    Text {
+                        anchors.centerIn: parent
+                        text: "DECLINE"
+                        color: "white"
+                        font.pixelSize: 16
+                        font.bold: true
+                    }
+                    
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (backend) {
+                                backend.inviteResponse(invitePopup.invitationId, false)
+                            }
+                            invitePopup.close()
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -8,21 +8,169 @@ Page {
     height: 600
 
     property string roomCode: "ROOM 01"
-    property int currentPlayers: 3
-    property int maxPlayers: 5
-    property string hostName: "NKDUYEN"
-    property bool isHost: true
+    property int currentPlayers: 1
+    property int maxPlayers: 4
+    property string hostName: ""
+    property bool isHost: false
     property bool isReady: false
     property var backend: null
+    property var roomMembers: []
     
     // Player ready states
-    property var playerReadyStates: [true, true, false, false, false] // Host always ready, player1 ready, player2-4 not ready
+    property var playerReadyStates: [true, false, false, false] // Host always ready
+    
+    // Revision counter to force QML re-render when arrays change
+    property int stateRevision: 0
     
     function allPlayersReady() {
         for (var i = 0; i < currentPlayers; i++) {
             if (!playerReadyStates[i]) return false;
         }
-        return currentPlayers === maxPlayers;
+        return currentPlayers >= 2 && currentPlayers <= maxPlayers;
+    }
+    
+    function refreshRoomInfo() {
+        if (!backend) return;
+        
+        try {
+            var roomInfoJson = backend.getRoomInfo();
+            if (roomInfoJson === "") return;
+            
+            var roomInfo = JSON.parse(roomInfoJson);
+            roomCode = roomInfo.room_code || roomCode;
+            maxPlayers = parseInt(roomInfo.max_players) || 4;
+            hostName = roomInfo.host_name || "";
+            
+            // Parse members
+            if (roomInfo.members) {
+                roomMembers = roomInfo.members.split('|');
+                currentPlayers = roomMembers.length;
+                
+                // Only initialize ready states if not already set (first time or changed player count)
+                if (playerReadyStates.length !== currentPlayers) {
+                    playerReadyStates = [];
+                    for (var i = 0; i < currentPlayers; i++) {
+                        playerReadyStates.push(i === 0); // Only host (first member) is ready by default
+                    }
+                    roomStateVersion++;
+                }
+            }
+            
+            // Verify if current user is host (only update if username matches host)
+            if (backend.user_name === hostName) {
+                isHost = true;
+                isReady = true;
+            } else {
+                // Explicitly set false if not host
+                isHost = false;
+            }
+            
+            console.log("Room refreshed:", roomCode, "Players:", currentPlayers, "Host:", hostName, "isHost:", isHost, "user:", backend.user_name);
+        } catch (e) {
+            console.error("Failed to parse room info:", e);
+        }
+    }
+    
+    function parseRoomState(stateJson) {
+        // Parse UPDATE_ROOM_STATE message: [{"username":"duyen","is_ready":true}, ...]
+        try {
+            var members = JSON.parse(stateJson);
+            var newMembers = [];
+            var newReadyStates = [];
+            
+            for (var i = 0; i < members.length; i++) {
+                newMembers.push(members[i].username);
+                newReadyStates.push(members[i].is_ready);
+                
+                // Update current user's ready state
+                if (members[i].username === backend.user_name) {
+                    isReady = members[i].is_ready;
+                }
+            }
+            
+            // Assign new arrays to trigger property change
+            roomMembers = newMembers;
+            playerReadyStates = newReadyStates;
+            currentPlayers = roomMembers.length;
+            
+            // Increment revision to force UI update
+            stateRevision++;
+            
+            console.log("Room state parsed:", roomMembers, "Ready states:", playerReadyStates);
+        } catch (e) {
+            console.error("Failed to parse room state:", e, stateJson);
+        }
+    }
+    
+    function refreshOnlineUsers() {
+        if (!backend) return;
+        
+        try {
+            var usersJson = backend.fetchOnlineUsers();
+            if (usersJson === "") return;
+            
+            var users = JSON.parse(usersJson);
+            onlinePlayersModel.clear();
+            
+            for (var i = 0; i < users.length; i++) {
+                // Don't show users already in room
+                if (roomMembers.indexOf(users[i]) === -1) {
+                    onlinePlayersModel.append({ playerName: users[i] });
+                }
+            }
+        } catch (e) {
+            console.error("Failed to parse online users:", e);
+        }
+    }
+    
+    Timer {
+        id: refreshTimer
+        interval: 2000
+        running: true
+        repeat: true
+        onTriggered: {
+            refreshRoomInfo();
+            refreshOnlineUsers();
+        }
+    }
+    
+    Component.onCompleted: {
+        refreshRoomInfo();
+        refreshOnlineUsers();
+        
+        if (backend) {
+            backend.leaveRoomSuccess.connect(function() {
+                stackView.pop()
+            })
+            
+            backend.inviteSuccess.connect(function() {
+                console.log("Invitation sent successfully!")
+            })
+            
+            backend.inviteFail.connect(function() {
+                console.log("Failed to send invitation!")
+            })
+            
+            backend.readyUpdate.connect(function() {
+                console.log("Ready status updated!")
+                // Refresh to get updated ready state (will be sent via broadcast)
+                refreshRoomInfo()
+            })
+            
+            backend.startGameSuccess.connect(function() {
+                console.log("Game started!")
+                // TODO: Navigate to game screen
+            })
+            
+            backend.startGameFail.connect(function() {
+                console.log("Failed to start game!")
+            })
+            
+            backend.updateRoomState.connect(function(membersJson) {
+                console.log("Room state updated:", membersJson)
+                parseRoomState(membersJson)
+            })
+        }
     }
 
     // Background with animated sunburst
@@ -127,12 +275,7 @@ Page {
                 spacing: 8
                 
                 model: ListModel {
-                    ListElement { playerName: "Player1" }
-                    ListElement { playerName: "Player2" }
-                    ListElement { playerName: "Player3" }
-                    ListElement { playerName: "Player4" }
-                    ListElement { playerName: "Player5" }
-                    ListElement { playerName: "Player6" }
+                    id: onlinePlayersModel
                 }
                 
                 delegate: Rectangle {
@@ -196,6 +339,9 @@ Page {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     console.log("Invite player:", playerName)
+                                    if (backend) {
+                                        backend.inviteUser(playerName)
+                                    }
                                 }
                             }
                         }
@@ -209,7 +355,7 @@ Page {
     Rectangle {
         id: rightPanel
         width: 480
-        height: 580
+        height: 550
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         anchors.margins: 20
@@ -222,7 +368,7 @@ Page {
         Column {
             anchors.fill: parent
             anchors.margins: 20
-            spacing: 12
+            spacing: 10
 
             // Room Header
             Rectangle {
@@ -280,12 +426,12 @@ Page {
             // Player Slots
             Column {
                 width: parent.width
-                spacing: 8
+                spacing: 6
 
                 // Host Slot
                 Rectangle {
                     width: parent.width
-                    height: 65
+                    height: 70
                     radius: 12
                     color: "#90A4AE"
                     border.color: "#607D8B"
@@ -357,11 +503,11 @@ Page {
 
                 // Player Slots
                 Repeater {
-                    model: 4
+                    model: 3
                     
                     Rectangle {
                         width: parent.width
-                        height: 65
+                        height: 70
                         radius: 12
                         color: index < currentPlayers - 1 ? "#90A4AE" : "#78909C"
                         border.color: "#607D8B"
@@ -393,7 +539,10 @@ Page {
                             }
                             
                             Text {
-                                text: index < currentPlayers - 1 ? "PLAYER " + (index + 1) : "Waiting for player..."
+                                text: {
+                                    stateRevision; // Force re-evaluation
+                                    return index < currentPlayers - 1 && roomMembers[index + 1] ? roomMembers[index + 1] : "Waiting for player...";
+                                }
                                 color: "white"
                                 font.pixelSize: 18
                                 font.bold: true
@@ -408,12 +557,18 @@ Page {
                                 height: 50
                                 radius: 25
                                 visible: index < currentPlayers - 1
-                                color: playerReadyStates[index + 1] ? "#4CAF50" : "#F44336"
+                                color: {
+                                    stateRevision; // Force re-evaluation
+                                    return (playerReadyStates[index + 1] !== undefined && playerReadyStates[index + 1]) ? "#4CAF50" : "#F44336";
+                                }
                                 Layout.alignment: Qt.AlignVCenter
                                 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: playerReadyStates[index + 1] ? "✓" : "✗"
+                                    text: {
+                                        stateRevision; // Force re-evaluation
+                                        return (playerReadyStates[index + 1] !== undefined && playerReadyStates[index + 1]) ? "✓" : "✗";
+                                    }
                                     color: "white"
                                     font.pixelSize: 32
                                     font.bold: true
@@ -424,6 +579,12 @@ Page {
                 }
             }
 
+            // Spacer để đẩy buttons xuống
+            Item {
+                width: parent.width
+                height: 10
+            }
+
             // Bottom Buttons
             Row {
                 spacing: 20
@@ -432,8 +593,8 @@ Page {
                 // Leave Room Button
                 Rectangle {
                     width: 140
-                    height: 60
-                    radius: 30
+                    height: 50
+                    radius: 25
                     color: "#FF5252"
                     border.color: "#D32F2F"
                     border.width: 4
@@ -450,8 +611,11 @@ Page {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            // Navigate back to HomeUser
-                            stackView.pop()
+                            if (backend) {
+                                backend.leaveRoom()
+                            } else {
+                                stackView.pop()
+                            }
                         }
                     }
                 }
@@ -460,8 +624,8 @@ Page {
                 Rectangle {
                     visible: !isHost
                     width: 140
-                    height: 60
-                    radius: 30
+                    height: 50
+                    radius: 25
                     color: isReady ? "#2196F3" : "#4CAF50"
                     border.color: isReady ? "#1976D2" : "#388E3C"
                     border.width: 4
@@ -479,9 +643,8 @@ Page {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             isReady = !isReady
-                            // Update player ready state
                             if (backend) {
-                                // backend.toggleReady()
+                                backend.readyToggle()
                             }
                         }
                     }
@@ -491,8 +654,8 @@ Page {
                 Rectangle {
                     visible: isHost
                     width: 140
-                    height: 60
-                    radius: 30
+                    height: 50
+                    radius: 25
                     color: allPlayersReady() ? "#4CAF50" : "#90A4AE"
                     border.color: allPlayersReady() ? "#388E3C" : "#607D8B"
                     border.width: 4
@@ -511,9 +674,8 @@ Page {
                         cursorShape: allPlayersReady() ? Qt.PointingHandCursor : Qt.ForbiddenCursor
                         enabled: allPlayersReady()
                         onClicked: {
-                            if (allPlayersReady()) {
-                                // Start the game
-                                console.log("Starting game...")
+                            if (allPlayersReady() && backend) {
+                                backend.startGame()
                             }
                         }
                     }
