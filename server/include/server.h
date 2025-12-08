@@ -21,6 +21,13 @@
 #define BUFF_SIZE 1024
 #define TRUE 1
 #define FALSE 0
+#define MAX_PLAYERS 4
+
+// === Hằng số Giao thức Round 3 ===
+#define MOVE_SPIN   "SPIN"
+#define MOVE_PASS   "PASS"
+#define SPIN_RESULT "SPIN_RESULT"
+#define ROUND3_END  "ROUND3_END"
 
 // Message types - PHẢI GIỐNG CLIENT
 enum msg_type
@@ -73,8 +80,8 @@ enum msg_type
   GAME_START,
   GAME_START_NOTIFY,
   ROUND_INFO,
-  ROUND_ANSWER,
-  ROUND_RESULT,
+  ROUND_ANSWER, // Dùng cái này để gửi MOVE (SPIN/PASS)
+  ROUND_RESULT, // Dùng cái này để trả về SPIN_RESULT
   PLAYER_FORFEIT,
   PLAYER_FORFEIT_NOTIFY,
   GAME_END,
@@ -120,8 +127,29 @@ typedef struct _client
   struct _client *next;
 } Client;
 
+// === Cấu trúc MATCH (In-Memory Game State) ===
+typedef struct _match {
+    int room_id;
+    int current_round;          // 1, 2, 3, 4
+    
+    // Thông tin người chơi trong trận
+    int player_ids[MAX_PLAYERS];
+    char player_names[MAX_PLAYERS][50];
+    int count_players;
+    
+    int current_turn_index;     // Index của người chơi đang đến lượt (0..count_players-1)
+    
+    // === Data cho Round 3 ===
+    int r3_scores[MAX_PLAYERS]; // Tổng điểm quay
+    int r3_spins[MAX_PLAYERS];  // Số lượt đã quay (0, 1, 2)
+    int r3_passed[MAX_PLAYERS]; // Đã PASS chưa (0/1)
+
+    struct _match *next;
+} Match;
+
 // Global variables
 extern Client *head_client;
+extern Match *head_match; // Danh sách các trận đấu đang diễn ra
 extern pthread_mutex_t mutex;
 extern MYSQL *g_mysql_conn;
 
@@ -135,6 +163,12 @@ Client *new_client();
 void add_client(int conn_fd);
 void delete_client(int conn_fd);
 Client *find_client(int conn_fd);
+
+// Match management (New)
+void create_match_in_memory(int room_id);
+Match *find_match(int room_id);
+void end_match(int room_id);
+void handle_round_3_move(Client *cli, char *json_data);
 
 // Authentication functions
 int handle_signup(char username[BUFF_SIZE], char password[BUFF_SIZE]);

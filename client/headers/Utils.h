@@ -89,7 +89,7 @@ typedef struct _message
   enum msg_type type;
   char data_type[25];
   int length;
-  char value[BUFF_SIZE];    // value phải có dạng "<param1> | <param2> | ..."
+  char value[BUFF_SIZE];
 } Message;
 
 typedef struct _account
@@ -121,9 +121,11 @@ int invite_response(int invitation_id, int accept);
 int ready_toggle();
 int start_game();
 int get_room_info(char buffer[], int bufsize);
-// Message listener
+
+// Message listener & Utils
 void set_message_callback(MessageCallback callback);
 void start_message_listener();
 void stop_message_listener();
+void send_message(Message msg); // <--- ĐÃ THÊM DÒNG NÀY
 
 #endif /* UTILS_H */

@@ -433,3 +433,14 @@ void stop_message_listener()
     printf("Message listener stopped\n");
   }
 }
+
+// =========================================================
+// [THÊM MỚI] Hàm gửi tin nhắn tùy chỉnh (dùng cho Round 3)
+// =========================================================
+void send_message(Message msg)
+{
+  if (send(sockfd, &msg, sizeof(Message), 0) < 0)
+  {
+    printf("Send message failed\n");
+  }
+}

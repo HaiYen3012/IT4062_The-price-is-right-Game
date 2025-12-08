@@ -10,7 +10,6 @@ static void message_callback_wrapper(Message msg)
 {
     if (BackEnd::instance) {
         if (msg.type == INVITE_NOTIFY) {
-            // Parse: invitation_id|from_username|room_code
             int invitation_id;
             char from_user[256], room_code[256];
             sscanf(msg.value, "%d|%[^|]|%s", &invitation_id, from_user, room_code);
@@ -21,6 +20,21 @@ static void message_callback_wrapper(Message msg)
         }
         else if (msg.type == UPDATE_ROOM_STATE) {
             emit BackEnd::instance->updateRoomState(QString::fromUtf8(msg.value));
+        }
+        // [MỚI] Xử lý sự kiện Game Start (Type 46)
+        else if (msg.type == GAME_START_NOTIFY) {
+            qDebug() << "Received GAME_START_NOTIFY:" << msg.value;
+            emit BackEnd::instance->gameStarted(QString::fromUtf8(msg.value));
+        }
+        // [MỚI] Xử lý kết quả quay (Type 49)
+        else if (msg.type == ROUND_RESULT) {
+            qDebug() << "Received ROUND_RESULT:" << msg.value;
+            emit BackEnd::instance->roundResult(QString::fromUtf8(msg.value));
+        }
+        else if (msg.type == ROUND_INFO) {
+            qDebug() << "Received ROUND_INFO (Turn Change):" << msg.value;
+            // Dùng chung signal roundResult để QML xử lý JSON
+            emit BackEnd::instance->roundResult(QString::fromUtf8(msg.value));
         }
     }
 }
@@ -299,7 +313,7 @@ void BackEnd::startGame()
     
     switch(result) {
         case START_GAME_SUCCESS:
-            qDebug() << "Game started!";
+            qDebug() << "Game started request sent!";
             emit startGameSuccess();
             break;
         case START_GAME_FAIL:
@@ -310,6 +324,23 @@ void BackEnd::startGame()
             qDebug() << "Unknown error!";
             break;
     }
+}
+
+void BackEnd::sendRoundAnswer(QString answer)
+{
+    qDebug() << "Sending round answer/move:" << answer;
+    
+    Message msg;
+    msg.type = ROUND_ANSWER; // Đảm bảo Enum này khớp với Utils.h
+    strcpy(msg.data_type, "text");
+    
+    // Copy dữ liệu an toàn
+    QByteArray ba = answer.toUtf8();
+    strncpy(msg.value, ba.constData(), BUFF_SIZE - 1);
+    msg.value[BUFF_SIZE - 1] = '\0';
+    msg.length = strlen(msg.value);
+    
+    send_message(msg); 
 }
 
 QString BackEnd::getRoomInfo()

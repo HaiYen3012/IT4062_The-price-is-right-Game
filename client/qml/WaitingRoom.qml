@@ -26,12 +26,12 @@ Page {
         for (var i = 0; i < currentPlayers; i++) {
             if (!playerReadyStates[i]) return false;
         }
-        return currentPlayers >= 2 && currentPlayers <= maxPlayers;
+        // [QUAN TRỌNG] Sửa >= 1 để test 1 mình được
+        return currentPlayers >= 1 && currentPlayers <= maxPlayers;
     }
     
     function refreshRoomInfo() {
         if (!backend) return;
-        
         try {
             var roomInfoJson = backend.getRoomInfo();
             if (roomInfoJson === "") return;
@@ -50,9 +50,10 @@ Page {
                 if (playerReadyStates.length !== currentPlayers) {
                     playerReadyStates = [];
                     for (var i = 0; i < currentPlayers; i++) {
-                        playerReadyStates.push(i === 0); // Only host (first member) is ready by default
+                        playerReadyStates.push(i === 0);
+                        // Only host (first member) is ready by default
                     }
-                    roomStateVersion++;
+                    stateRevision++; // <--- ĐÃ SỬA LỖI Ở ĐÂY (trước là roomStateVersion)
                 }
             }
             
@@ -95,7 +96,6 @@ Page {
             
             // Increment revision to force UI update
             stateRevision++;
-            
             console.log("Room state parsed:", roomMembers, "Ready states:", playerReadyStates);
         } catch (e) {
             console.error("Failed to parse room state:", e, stateJson);
@@ -104,14 +104,12 @@ Page {
     
     function refreshOnlineUsers() {
         if (!backend) return;
-        
         try {
             var usersJson = backend.fetchOnlineUsers();
             if (usersJson === "") return;
             
             var users = JSON.parse(usersJson);
             onlinePlayersModel.clear();
-            
             for (var i = 0; i < users.length; i++) {
                 // Don't show users already in room
                 if (roomMembers.indexOf(users[i]) === -1) {
@@ -157,9 +155,29 @@ Page {
                 refreshRoomInfo()
             })
             
+            // [SỬA LẠI] Xử lý khi Host ấn Start thành công
             backend.startGameSuccess.connect(function() {
-                console.log("Game started!")
-                // TODO: Navigate to game screen
+                console.log("Game started! (Host initiated)")
+                // Host chuyển màn hình ngay lập tức
+                stackView.push("qrc:/qml/Room3.qml", { 
+                    "backend": backend, 
+                    "hostName": hostName,
+                    "currentPlayerIndex": 0
+                })
+            })
+            
+            // [SỬA LẠI] Lắng nghe sự kiện Bắt đầu game từ Server (Dành cho Guest)
+            backend.gameStarted.connect(function(roundInfo) {
+                console.log("Game Started Notify received! Info:", roundInfo)
+                
+                // Kiểm tra xem đã chuyển màn hình chưa để tránh push 2 lần (nếu là Host)
+                if (stackView.currentItem.objectName !== "room3Page") {
+                    stackView.push("qrc:/qml/Room3.qml", { 
+                        "backend": backend, 
+                        "hostName": hostName,
+                        "currentPlayerIndex": 0
+                    })
+                }
             })
             
             backend.startGameFail.connect(function() {
@@ -189,7 +207,6 @@ Page {
                 var centerX = width / 2;
                 var centerY = height / 2;
                 var numRays = 24;
-                
                 for (var i = 0; i < numRays; i++) {
                     var angle = (i * (360 / numRays) + rotation) * Math.PI / 180;
                     var gradient = ctx.createLinearGradient(
@@ -650,7 +667,7 @@ Page {
                     }
                 }
 
-                // Start Game Button (for host only) - chỉ enable khi tất cả ready
+                // Start Game Button (for host only)
                 Rectangle {
                     visible: isHost
                     width: 140

@@ -1,3 +1,4 @@
+// client/headers/BackEnd.h
 #ifndef BACKEND_H
 #define BACKEND_H
 
@@ -40,6 +41,9 @@ public:
     Q_INVOKABLE void readyToggle();
     Q_INVOKABLE void startGame();
     Q_INVOKABLE QString getRoomInfo();
+    
+    // [MỚI] Hàm gửi đáp án/hành động (SPIN, PASS)
+    Q_INVOKABLE void sendRoundAnswer(QString answer);
 
 signals:
     void userNameChanged();
@@ -65,6 +69,10 @@ signals:
     void readyUpdate();
     void startGameSuccess();
     void startGameFail();
+    
+    // [MỚI] Tín hiệu báo game bắt đầu và kết quả vòng chơi
+    void gameStarted(QString info);
+    void roundResult(QString result);
 
 private:
     QString user_name;
