@@ -521,14 +521,7 @@ void *handle_client(void *arg)
                     result = handle_start_game(cli);
                     msg.type = result;
                     send(conn_fd, &msg, sizeof(Message), 0);
-                    
-                    // If game started successfully, start Round 1 in a separate thread
-                    if (result == START_GAME_SUCCESS) {
-                        pthread_t round_thread;
-                        int *proom_id = malloc(sizeof(int));
-                        *proom_id = cli->room_id;
-                        pthread_create(&round_thread, NULL, start_round1_thread, proom_id);
-                    }
+                    // Game thread is created inside handle_start_game()
                 }
                 break;
                 
@@ -1528,7 +1521,7 @@ void start_round1(int room_id)
 {
     pthread_mutex_lock(&mutex);
     
-    printf("Starting Round 1 (5 questions) for room %d\n", room_id);
+    printf("Starting Round 1 (3 questions) for room %d\n", room_id);
     
     // Get match_id for this room
     char query[1024];
@@ -1540,8 +1533,25 @@ void start_round1(int room_id)
         MYSQL_ROW row = mysql_fetch_row(res);
         if (row != NULL) {
             match_id = atoi(row[0]);
+            
+            // Check if this match already has rounds (game already started)
+            mysql_free_result(res);
+            sprintf(query, "SELECT COUNT(*) FROM rounds WHERE match_id = %d", match_id);
+            if (mysql_query(g_db_conn, query) == 0) {
+                res = mysql_store_result(g_db_conn);
+                row = mysql_fetch_row(res);
+                int round_count = atoi(row[0]);
+                mysql_free_result(res);
+                
+                if (round_count > 0) {
+                    printf("Match %d already has %d rounds, game already running. Aborting.\n", match_id, round_count);
+                    pthread_mutex_unlock(&mutex);
+                    return;
+                }
+            }
+        } else {
+            mysql_free_result(res);
         }
-        mysql_free_result(res);
     }
     
     // If no active match, create one
@@ -1550,6 +1560,10 @@ void start_round1(int room_id)
         if (mysql_query(g_db_conn, query) == 0) {
             match_id = mysql_insert_id(g_db_conn);
             printf("Created new match: %d for room %d\n", match_id, room_id);
+        } else {
+            fprintf(stderr, "Failed to create match: %s\n", mysql_error(g_db_conn));
+            pthread_mutex_unlock(&mutex);
+            return;
         }
     }
     
@@ -1673,17 +1687,17 @@ void start_round1(int room_id)
         // Broadcast results
         broadcast_question_result(room_id, round_id);
         
-        // Wait 3 seconds before next question (except after last question)
+        // Wait 8 seconds before next question (except after last question)
         if (question_num < 3) {
-            printf("Waiting 3 seconds before next question...\n");
-            sleep(3);
+            printf("Waiting 8 seconds before next question...\n");
+            sleep(8);
         }
     }
     
     printf("\n=== Round 1 Complete! All 3 questions finished ===\n");
     
-    // Wait 3 seconds then show final ranking
-    sleep(3);
+    // Wait 5 seconds then show final ranking
+    sleep(5);
     broadcast_final_ranking(room_id, match_id);
 }
 
@@ -1839,17 +1853,17 @@ void broadcast_question_result(int room_id, int round_id)
     // Get all players' TOTAL cumulative scores (sum of all rounds in this match)
     sprintf(query, 
         "SELECT u.username, "
-        "COALESCE(SUM(ra_all.score_awarded), 0) AS total_score, "
+        "COALESCE((SELECT SUM(ra.score_awarded) "
+        "          FROM rounds r2 "
+        "          JOIN round_answers ra ON ra.round_id = r2.round_id "
+        "          WHERE r2.match_id = m.match_id AND ra.user_id = u.user_id), 0) AS total_score, "
         "COALESCE(ra_current.is_correct, 0) AS is_correct "
         "FROM room_members rm "
         "JOIN users u ON rm.user_id = u.user_id "
         "JOIN rounds r ON r.round_id = %d "
         "JOIN matches m ON r.match_id = m.match_id AND m.room_id = rm.room_id "
         "LEFT JOIN round_answers ra_current ON ra_current.round_id = r.round_id AND ra_current.user_id = u.user_id "
-        "LEFT JOIN rounds r_all ON r_all.match_id = m.match_id "
-        "LEFT JOIN round_answers ra_all ON ra_all.round_id = r_all.round_id AND ra_all.user_id = u.user_id "
         "WHERE rm.left_at IS NULL "
-        "GROUP BY u.user_id, u.username, ra_current.is_correct "
         "ORDER BY total_score DESC", round_id);
     
     char result_json[BUFF_SIZE] = "{\"correct\":\"";

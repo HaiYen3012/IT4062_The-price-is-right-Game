@@ -819,7 +819,10 @@ Page {
             radius: 10
             border.color: showResult ? "#10B981" : "#6B7280"
             border.width: 2
-            visible: showResult
+            opacity: showResult ? 1.0 : 0.0
+            Behavior on opacity {
+                NumberAnimation { duration: 300 }
+            }
             
             RowLayout {
                 anchors.fill: parent
