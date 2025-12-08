@@ -364,6 +364,7 @@ qrc_qml.cpp: resources/qml.qrc \
 		qml/WaitingRoom.qml \
 		qml/SignInPage.qml \
 		qml/HomeUser.qml \
+		qml/RankingPage.qml \
 		qml/Round1Room.qml \
 		qml/RegisterPage.qml \
 		qml/HomeGuest.qml \

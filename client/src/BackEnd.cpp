@@ -88,6 +88,9 @@ static void message_callback_wrapper(Message msg)
         else if (msg.type == QUESTION_RESULT) {
             emit BackEnd::instance->questionResult(QString::fromUtf8(msg.value));
         }
+        else if (msg.type == GAME_END) {
+            emit BackEnd::instance->gameEnd(QString::fromUtf8(msg.value));
+        }
     }
 }
 

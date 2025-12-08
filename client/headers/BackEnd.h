@@ -68,6 +68,7 @@ signals:
     void startGameFail();
     void questionStart(int roundId, QString question, QString optionA, QString optionB, QString optionC, QString optionD);
     void questionResult(QString resultData);
+    void gameEnd(QString rankingData);
 
 private:
     QString user_name;

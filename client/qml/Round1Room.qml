@@ -14,7 +14,7 @@ Page {
     property string optionB: ""
     property string optionC: ""
     property string optionD: ""
-    property int timeRemaining: 17  // 2s for navigation + 15s for answering
+    property int timeRemaining: 15  // 15s for answering
     property bool answered: false
     property string selectedAnswer: ""
     property var playerScores: []
@@ -26,9 +26,23 @@ Page {
         if (backend) {
             backend.questionStart.connect(handleQuestionStart);
             backend.questionResult.connect(handleQuestionResult);
+            backend.gameEnd.connect(handleGameEnd);
             console.log("Round1Room signals connected");
         } else {
             console.error("Backend is null!");
+        }
+    }
+    
+    function handleGameEnd(rankingData) {
+        console.log("Game ended, showing ranking:", rankingData);
+        try {
+            var data = JSON.parse(rankingData);
+            stackView.push("qrc:/qml/RankingPage.qml", { 
+                backend: backend,
+                rankings: data.players 
+            });
+        } catch (e) {
+            console.error("Failed to parse ranking data:", e);
         }
     }
     
@@ -41,21 +55,26 @@ Page {
         console.log("Option C:", optC);
         console.log("Option D:", optD);
         
+        // Reset all states first (important to reset before assigning new values)
+        showResult = false;
+        answered = false;
+        selectedAnswer = "";
+        correctAnswer = "";
+        playerScores = [];
+        
+        // Then assign new question data
         currentRoundId = roundId;
         currentQuestion = question;
         round1Room.optionA = optA;
         round1Room.optionB = optB;
         round1Room.optionC = optC;
         round1Room.optionD = optD;
-        timeRemaining = 17;  // Reset to 17s (2s navigation + 15s answering)
-        answered = false;
-        selectedAnswer = "";
-        showResult = false;
-        correctAnswer = "";
+        timeRemaining = 15;  // Reset to 15s
         
         console.log("After assignment - optionA:", round1Room.optionA);
         console.log("After assignment - optionC:", round1Room.optionC);
         
+        // Start countdown timer immediately
         countdownTimer.running = true;
     }
     
@@ -354,18 +373,26 @@ Page {
                     GradientStop { 
                         position: 0.0
                         color: {
-                            if (showResult && correctAnswer === "A") return "#10B981"; // Correct = Green
-                            if (showResult && selectedAnswer === "A") return "#DC2626"; // Wrong = Red
-                            if (selectedAnswer === "A" && !showResult) return "#FBBF24"; // Selected = Yellow
+                            // When showing results
+                            if (showResult) {
+                                if (correctAnswer === "A") return "#10B981"; // Correct answer = Green
+                                if (selectedAnswer === "A" && correctAnswer !== "A") return "#DC2626"; // Wrong answer = Red
+                                return "#3B82F6"; // Other buttons = Blue
+                            }
+                            // Before showing results
+                            if (selectedAnswer === "A") return "#FBBF24"; // Selected = Yellow
                             return "#3B82F6"; // Default = Blue
                         }
                     }
                     GradientStop { 
                         position: 1.0
                         color: {
-                            if (showResult && correctAnswer === "A") return "#059669";
-                            if (showResult && selectedAnswer === "A") return "#991B1B";
-                            if (selectedAnswer === "A" && !showResult) return "#F59E0B";
+                            if (showResult) {
+                                if (correctAnswer === "A") return "#059669";
+                                if (selectedAnswer === "A" && correctAnswer !== "A") return "#991B1B";
+                                return "#2563EB";
+                            }
+                            if (selectedAnswer === "A") return "#F59E0B";
                             return "#2563EB";
                         }
                     }
@@ -444,18 +471,24 @@ Page {
                     GradientStop { 
                         position: 0.0
                         color: {
-                            if (showResult && correctAnswer === "B") return "#10B981";
-                            if (showResult && selectedAnswer === "B") return "#DC2626";
-                            if (selectedAnswer === "B" && !showResult) return "#FBBF24";
+                            if (showResult) {
+                                if (correctAnswer === "B") return "#10B981";
+                                if (selectedAnswer === "B" && correctAnswer !== "B") return "#DC2626";
+                                return "#3B82F6";
+                            }
+                            if (selectedAnswer === "B") return "#FBBF24";
                             return "#3B82F6";
                         }
                     }
                     GradientStop { 
                         position: 1.0
                         color: {
-                            if (showResult && correctAnswer === "B") return "#059669";
-                            if (showResult && selectedAnswer === "B") return "#991B1B";
-                            if (selectedAnswer === "B" && !showResult) return "#F59E0B";
+                            if (showResult) {
+                                if (correctAnswer === "B") return "#059669";
+                                if (selectedAnswer === "B" && correctAnswer !== "B") return "#991B1B";
+                                return "#2563EB";
+                            }
+                            if (selectedAnswer === "B") return "#F59E0B";
                             return "#2563EB";
                         }
                     }
@@ -534,18 +567,24 @@ Page {
                     GradientStop { 
                         position: 0.0
                         color: {
-                            if (showResult && correctAnswer === "C") return "#10B981";
-                            if (showResult && selectedAnswer === "C") return "#DC2626";
-                            if (selectedAnswer === "C" && !showResult) return "#FBBF24";
+                            if (showResult) {
+                                if (correctAnswer === "C") return "#10B981";
+                                if (selectedAnswer === "C" && correctAnswer !== "C") return "#DC2626";
+                                return "#3B82F6";
+                            }
+                            if (selectedAnswer === "C") return "#FBBF24";
                             return "#3B82F6";
                         }
                     }
                     GradientStop { 
                         position: 1.0
                         color: {
-                            if (showResult && correctAnswer === "C") return "#059669";
-                            if (showResult && selectedAnswer === "C") return "#991B1B";
-                            if (selectedAnswer === "C" && !showResult) return "#F59E0B";
+                            if (showResult) {
+                                if (correctAnswer === "C") return "#059669";
+                                if (selectedAnswer === "C" && correctAnswer !== "C") return "#991B1B";
+                                return "#2563EB";
+                            }
+                            if (selectedAnswer === "C") return "#F59E0B";
                             return "#2563EB";
                         }
                     }
@@ -624,18 +663,24 @@ Page {
                     GradientStop { 
                         position: 0.0
                         color: {
-                            if (showResult && correctAnswer === "D") return "#10B981";
-                            if (showResult && selectedAnswer === "D") return "#DC2626";
-                            if (selectedAnswer === "D" && !showResult) return "#FBBF24";
+                            if (showResult) {
+                                if (correctAnswer === "D") return "#10B981";
+                                if (selectedAnswer === "D" && correctAnswer !== "D") return "#DC2626";
+                                return "#3B82F6";
+                            }
+                            if (selectedAnswer === "D") return "#FBBF24";
                             return "#3B82F6";
                         }
                     }
                     GradientStop { 
                         position: 1.0
                         color: {
-                            if (showResult && correctAnswer === "D") return "#059669";
-                            if (showResult && selectedAnswer === "D") return "#991B1B";
-                            if (selectedAnswer === "D" && !showResult) return "#F59E0B";
+                            if (showResult) {
+                                if (correctAnswer === "D") return "#059669";
+                                if (selectedAnswer === "D" && correctAnswer !== "D") return "#991B1B";
+                                return "#2563EB";
+                            }
+                            if (selectedAnswer === "D") return "#F59E0B";
                             return "#2563EB";
                         }
                     }
