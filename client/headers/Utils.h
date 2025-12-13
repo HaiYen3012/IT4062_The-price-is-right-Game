@@ -58,6 +58,10 @@ enum msg_type
   INVITE_RESPONSE,
   READY_TOGGLE,
   READY_UPDATE,
+  KICK_USER,
+  KICK_SUCCESS,
+  KICK_FAIL,
+  KICK_NOTIFY,
   START_GAME,
   START_GAME_SUCCESS,
   START_GAME_FAIL,
@@ -122,6 +126,7 @@ int leave_room();
 int invite_user(char username[]);
 int invite_response(int invitation_id, int accept);
 int ready_toggle();
+int kick_user(char username[]);
 int start_game();
 int get_room_info(char buffer[], int bufsize);
 // Round 1 functions

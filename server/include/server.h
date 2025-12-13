@@ -67,6 +67,10 @@ enum msg_type
   INVITE_RESPONSE,
   READY_TOGGLE,
   READY_UPDATE,
+  KICK_USER,
+  KICK_SUCCESS,
+  KICK_FAIL,
+  KICK_NOTIFY,
   START_GAME,
   START_GAME_SUCCESS,
   START_GAME_FAIL,
@@ -151,6 +155,7 @@ int handle_leave_room(Client *cli);
 int handle_invite_user(Client *cli, char target_username[BUFF_SIZE]);
 int handle_invite_response(Client *cli, int invitation_id, int accept);
 int handle_ready_toggle(Client *cli);
+int handle_kick_user(Client *cli, char target_username[BUFF_SIZE]);
 int handle_start_game(Client *cli);
 void broadcast_room_state(int room_id);
 void send_invite_notification(int to_user_id, int from_user_id, int room_id, int invitation_id);
