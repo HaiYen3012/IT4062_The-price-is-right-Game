@@ -38,6 +38,7 @@ public:
     Q_INVOKABLE void inviteUser(QString username);
     Q_INVOKABLE void inviteResponse(int invitationId, bool accept);
     Q_INVOKABLE void readyToggle();
+    Q_INVOKABLE void kickUser(QString username);
     Q_INVOKABLE void startGame();
     Q_INVOKABLE QString getRoomInfo();
     Q_INVOKABLE void submitAnswer(int roundId, QString answer);
@@ -64,6 +65,9 @@ signals:
     void inviteFail();
     void inviteNotify(int invitationId, QString fromUser, QString roomCode);
     void readyUpdate();
+    void kickedFromRoom(QString hostName);
+    void kickSuccess();
+    void kickFail();
     void startGameSuccess();
     void startGameFail();
     void questionStart(int roundId, QString question, QString optionA, QString optionB, QString optionC, QString optionD);

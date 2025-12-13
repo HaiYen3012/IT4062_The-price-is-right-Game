@@ -516,6 +516,20 @@ void *handle_client(void *arg)
                 }
                 break;
                 
+            case KICK_USER:
+                {
+                    char target_username[BUFF_SIZE];
+                    strcpy(target_username, msg.value);
+                    int old_room = cli->room_id;
+                    result = handle_kick_user(cli, target_username);
+                    msg.type = result;
+                    send(conn_fd, &msg, sizeof(Message), 0);
+                    if (result == KICK_SUCCESS && old_room > 0) {
+                        broadcast_room_state(old_room);
+                    }
+                }
+                break;
+                
             case START_GAME:
                 {
                     result = handle_start_game(cli);
@@ -1250,6 +1264,107 @@ int handle_ready_toggle(Client *cli)
     
     printf("[%d] Ready status: %d\n", cli->conn_fd, cli->is_ready);
     return READY_UPDATE;
+}
+
+int handle_kick_user(Client *cli, char target_username[BUFF_SIZE])
+{
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    char query[512];
+    
+    printf("[%d] Kick user: %s from room %d\n", cli->conn_fd, target_username, cli->room_id);
+    
+    pthread_mutex_lock(&mutex);
+    
+    if (cli->room_id <= 0) {
+        pthread_mutex_unlock(&mutex);
+        return KICK_FAIL;
+    }
+    
+    // Kiểm tra xem user có phải host không
+    sprintf(query, "SELECT user_id FROM users WHERE username = '%s'", cli->login_account);
+    if (mysql_query(g_db_conn, query)) {
+        pthread_mutex_unlock(&mutex);
+        return KICK_FAIL;
+    }
+    res = mysql_store_result(g_db_conn);
+    row = mysql_fetch_row(res);
+    if (row == NULL) {
+        mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return KICK_FAIL;
+    }
+    int user_id = atoi(row[0]);
+    mysql_free_result(res);
+    
+    sprintf(query, "SELECT host_user_id FROM rooms WHERE room_id = %d", cli->room_id);
+    if (mysql_query(g_db_conn, query)) {
+        pthread_mutex_unlock(&mutex);
+        return KICK_FAIL;
+    }
+    res = mysql_store_result(g_db_conn);
+    row = mysql_fetch_row(res);
+    if (row == NULL || atoi(row[0]) != user_id) {
+        // Chỉ host mới được kick
+        mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return KICK_FAIL;
+    }
+    mysql_free_result(res);
+    
+    // Lấy target user_id
+    sprintf(query, "SELECT user_id FROM users WHERE username = '%s'", target_username);
+    if (mysql_query(g_db_conn, query)) {
+        pthread_mutex_unlock(&mutex);
+        return KICK_FAIL;
+    }
+    res = mysql_store_result(g_db_conn);
+    row = mysql_fetch_row(res);
+    if (row == NULL) {
+        mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return KICK_FAIL;
+    }
+    int target_user_id = atoi(row[0]);
+    mysql_free_result(res);
+    
+    // Không cho kick bản thân
+    if (target_user_id == user_id) {
+        pthread_mutex_unlock(&mutex);
+        return KICK_FAIL;
+    }
+    
+    // Kick target user khỏi room (set left_at)
+    sprintf(query, "UPDATE room_members SET left_at = NOW() WHERE room_id = %d AND user_id = %d", 
+            cli->room_id, target_user_id);
+    mysql_query(g_db_conn, query);
+    
+    // Tìm target client và update room_id, is_ready
+    Client *target_cli = head_client;
+    while (target_cli != NULL) {
+        if (strcmp(target_cli->login_account, target_username) == 0) {
+            target_cli->room_id = 0;
+            target_cli->is_ready = 0;
+            
+            // Gửi thông báo kick đến target qua async socket
+            if (target_cli->async_conn_fd >= 0) {
+                Message notify;
+                notify.type = KICK_NOTIFY;
+                strcpy(notify.data_type, "string");
+                strcpy(notify.value, cli->login_account); // Tên host kick
+                notify.length = strlen(notify.value);
+                send(target_cli->async_conn_fd, &notify, sizeof(Message), 0);
+                printf("Sent KICK_NOTIFY to %s\n", target_username);
+            }
+            break;
+        }
+        target_cli = target_cli->next;
+    }
+    
+    pthread_mutex_unlock(&mutex);
+    
+    printf("[%d] User %s kicked from room %d by host %s\n", cli->conn_fd, target_username, cli->room_id, cli->login_account);
+    return KICK_SUCCESS;
 }
 
 int handle_start_game(Client *cli)

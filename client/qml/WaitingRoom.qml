@@ -173,6 +173,21 @@ Page {
                 console.log("Room state updated:", membersJson)
                 parseRoomState(membersJson)
             })
+            
+            backend.kickedFromRoom.connect(function(hostName) {
+                console.log("Kicked from room by:", hostName)
+                // Show notification and return to home
+                stackView.pop()
+            })
+            
+            backend.kickSuccess.connect(function() {
+                console.log("User kicked successfully!")
+                refreshRoomInfo()
+            })
+            
+            backend.kickFail.connect(function() {
+                console.log("Failed to kick user!")
+            })
         }
     }
 
@@ -554,6 +569,36 @@ Page {
                             
                             Item { Layout.fillWidth: true }
                             
+                            // Kick Button (only visible for host and if player exists)
+                            Rectangle {
+                                visible: isHost && index < currentPlayers - 1
+                                width: 60
+                                height: 40
+                                radius: 8
+                                color: "#FF5252"
+                                border.color: "#D32F2F"
+                                border.width: 2
+                                Layout.alignment: Qt.AlignVCenter
+                                
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "KICK"
+                                    color: "white"
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                }
+                                
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (index < currentPlayers - 1 && roomMembers[index + 1]) {
+                                            kickConfirmPopup.show(roomMembers[index + 1])
+                                        }
+                                    }
+                                }
+                            }
+                            
                             // Ready Status Indicator
                             Rectangle {
                                 width: 50
@@ -685,5 +730,11 @@ Page {
                 }
             }
         }
+    }
+    
+    // Kick Confirmation Popup
+    KickConfirmPopup {
+        id: kickConfirmPopup
+        backend: waitingRoom.backend
     }
 }

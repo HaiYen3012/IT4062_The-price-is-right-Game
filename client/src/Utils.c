@@ -332,6 +332,24 @@ int ready_toggle()
   return msg.type;
 }
 
+int kick_user(char username[])
+{
+  Message msg;
+  msg.type = KICK_USER;
+  strcpy(msg.data_type, "string");
+  strcpy(msg.value, username);
+  msg.length = strlen(msg.value);
+  if (send(sockfd, &msg, sizeof(Message), 0) < 0) {
+    printf("Send failed\n");
+    return -1;
+  }
+  if (recv(sockfd, &msg, sizeof(Message), 0) < 0) {
+    printf("Receive failed\n");
+    return -1;
+  }
+  return msg.type;
+}
+
 int start_game()
 {
   Message msg;

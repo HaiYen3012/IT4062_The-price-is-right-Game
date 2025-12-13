@@ -26,6 +26,11 @@ static void message_callback_wrapper(Message msg)
             qDebug() << "Game starting notification received!";
             emit BackEnd::instance->startGameSuccess();
         }
+        else if (msg.type == KICK_NOTIFY) {
+            // msg.value contains the host username who kicked
+            qDebug() << "KICK_NOTIFY received from:" << msg.value;
+            emit BackEnd::instance->kickedFromRoom(QString::fromUtf8(msg.value));
+        }
         else if (msg.type == QUESTION_START) {
             // Parse: round_id|question_text|option_a|option_b|option_c|option_d
             qDebug() << "QUESTION_START received, raw data:" << msg.value;
@@ -357,6 +362,30 @@ void BackEnd::readyToggle()
     if (result == READY_UPDATE) {
         qDebug() << "Ready status updated!";
         emit readyUpdate();
+    }
+}
+
+void BackEnd::kickUser(QString username)
+{
+    qDebug() << "Kicking user:" << username;
+    
+    char user[256];
+    strcpy(user, username.toStdString().c_str());
+    
+    int result = kick_user(user);
+    
+    switch(result) {
+        case KICK_SUCCESS:
+            qDebug() << "User kicked successfully!";
+            emit kickSuccess();
+            break;
+        case KICK_FAIL:
+            qDebug() << "Failed to kick user!";
+            emit kickFail();
+            break;
+        default:
+            qDebug() << "Unknown error!";
+            break;
     }
 }
 
