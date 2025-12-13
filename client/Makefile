@@ -1284,8 +1284,10 @@ qrc_qml.cpp: resources/qml.qrc \
 		qml/HomeUser.qml \
 		qml/WaitingRoom.qml \
 		qml/HomeGuest.qml \
+		qml/KickConfirmPopup.qml \
 		qml/RegisterPage.qml \
 		qml/RankingPage.qml \
+		qml/Round2Room.qml \
 		qml/Round1Room.qml \
 		qml/main.qml \
 		qml/SignInPage.qml
