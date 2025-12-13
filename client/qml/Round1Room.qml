@@ -127,6 +127,7 @@ Page {
         if (backend) {
             backend.questionStart.connect(handleQuestionStart);
             backend.questionResult.connect(handleQuestionResult);
+            backend.roundStart.connect(handleRoundStart);
             backend.gameEnd.connect(handleGameEnd);
             console.log("Round1Room signals connected");
         } else {
@@ -145,6 +146,18 @@ Page {
         } catch (e) {
             console.error("Failed to parse ranking data:", e);
         }
+    }
+    
+    // Handler để chuyển sang Round 2 khi nhận ROUND_START từ server
+    function handleRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit) {
+        console.log("=== ROUND_START received - Switching to Round2Room ===");
+        console.log("Round:", roundId, "Type:", roundType);
+        console.log("Product:", prodName);
+        
+        // Chuyển sang Round2Room
+        stackView.push("qrc:/qml/Round2Room.qml", {
+            backend: backend
+        });
     }
     
     function handleQuestionStart(roundId, question, optA, optB, optC, optD) {

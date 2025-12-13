@@ -12,6 +12,40 @@ Page {
     
     Component.onCompleted: {
         console.log("RankingPage loaded with", rankings.length, "players");
+        
+        // Kết nối signal để tự động chuyển sang Round 2 khi server gửi ROUND_START
+        if (backend) {
+            backend.roundStart.connect(handleRoundStart);
+            console.log("RankingPage: Connected to roundStart signal");
+        } else {
+            console.error("RankingPage: Backend is null!");
+        }
+    }
+    
+    Component.onDestruction: {
+        // Ngắt kết nối khi thoát để tránh duplicate connections
+        if (backend) {
+            backend.roundStart.disconnect(handleRoundStart);
+        }
+    }
+    
+    // Handler để chuyển sang Round 2 khi nhận ROUND_START từ server
+    function handleRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit) {
+        console.log("=== RankingPage: ROUND_START received - Switching to Round2Room ===");
+        console.log("Round:", roundId, "Type:", roundType);
+        console.log("Product:", prodName, "Desc:", prodDesc);
+        console.log("Threshold:", threshold, "% Time:", timeLimit, "s");
+        
+        // Chuyển sang Round2Room với đầy đủ parameters
+        stackView.push("qrc:/qml/Round2Room.qml", {
+            backend: backend,
+            roundId: roundId,
+            roundType: roundType,
+            prodName: prodName,
+            prodDesc: prodDesc,
+            threshold: threshold,
+            timeLimit_: timeLimit
+        });
     }
     
     // Animated gradient background
@@ -217,33 +251,53 @@ Page {
             }
         }
         
-        // Back Button
-        Button {
+        // Waiting for Round 2 Message
+        Rectangle {
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredWidth: 200
-            Layout.preferredHeight: 50
+            Layout.preferredWidth: 400
+            Layout.preferredHeight: 60
+            radius: 30
+            color: "#4CAF50"
+            border.color: "white"
+            border.width: 2
             
-            background: Rectangle {
-                radius: 25
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: "#3B82F6" }
-                    GradientStop { position: 1.0; color: "#2563EB" }
+            RowLayout {
+                anchors.centerIn: parent
+                spacing: 15
+                
+                // Loading animation
+                Rectangle {
+                    width: 10
+                    height: 10
+                    radius: 5
+                    color: "white"
+                    
+                    SequentialAnimation on opacity {
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.2; duration: 500 }
+                        NumberAnimation { to: 1.0; duration: 500 }
+                    }
                 }
-                border.color: "white"
-                border.width: 2
-            }
-            
-            contentItem: Text {
-                text: "Back to Home"
-                font.pixelSize: 18
-                font.bold: true
-                color: "white"
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-            
-            onClicked: {
-                stackView.pop(null);  // Go back to home
+                
+                Text {
+                    text: "Đang chờ Round 2 bắt đầu..."
+                    font.pixelSize: 20
+                    font.bold: true
+                    color: "white"
+                }
+                
+                Rectangle {
+                    width: 10
+                    height: 10
+                    radius: 5
+                    color: "white"
+                    
+                    SequentialAnimation on opacity {
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 1.0; duration: 500 }
+                        NumberAnimation { to: 0.2; duration: 500 }
+                    }
+                }
             }
         }
     }

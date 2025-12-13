@@ -402,6 +402,26 @@ int submit_answer(int round_id, char answer_choice[])
   return ANSWER_SUBMIT;
 }
 
+// ==================== ROUND 2 FUNCTIONS ====================
+
+int submit_price(int round_id, int guessed_price)
+{
+  Message msg;
+  msg.type = PRICE_SUBMIT;
+  strcpy(msg.data_type, "string");
+  
+  // Format: round_id|guessed_price
+  sprintf(msg.value, "%d|%d", round_id, guessed_price);
+  msg.length = strlen(msg.value);
+  
+  if (send(sockfd, &msg, sizeof(Message), 0) < 0) {
+    printf("Send failed\n");
+    return -1;
+  }
+  
+  return PRICE_SUBMIT;
+}
+
 // ==================== MESSAGE LISTENER ====================
 
 // Message listener thread - uses async_sockfd

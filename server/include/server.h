@@ -78,10 +78,12 @@ enum msg_type
   GAME_START_NOTIFY,
   ROUND_INFO,
   ROUND_ANSWER,
-  ROUND_RESULT,
   QUESTION_START,
   ANSWER_SUBMIT,
   QUESTION_RESULT,
+  ROUND_START,
+  PRICE_SUBMIT,
+  ROUND_RESULT,
   PLAYER_FORFEIT,
   PLAYER_FORFEIT_NOTIFY,
   GAME_END,
@@ -166,5 +168,11 @@ void *start_round1_thread(void *arg);
 void start_round1(int room_id);
 int handle_answer_submit(Client *cli, char answer[]);
 void broadcast_question_result(int room_id, int round_id);
+void broadcast_final_ranking(int room_id, int match_id);
+
+// Round 2 game functions
+void start_round2(int room_id, int match_id);
+int handle_price_submit(Client *cli, char price_data[]);
+void broadcast_round2_result(int room_id, int round_id);
 
 #endif

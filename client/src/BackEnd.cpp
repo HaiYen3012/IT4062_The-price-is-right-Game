@@ -93,6 +93,67 @@ static void message_callback_wrapper(Message msg)
         else if (msg.type == QUESTION_RESULT) {
             emit BackEnd::instance->questionResult(QString::fromUtf8(msg.value));
         }
+        else if (msg.type == ROUND_START) {
+            // Parse: round_id|round_type|product_name|product_desc|threshold_pct|time_limit
+            qDebug() << "ROUND_START received, raw data:" << msg.value;
+            
+            char buffer[2048];
+            strncpy(buffer, msg.value, sizeof(buffer) - 1);
+            buffer[sizeof(buffer) - 1] = '\0';
+            
+            int round_id;
+            char round_type[50], product_name[256], product_desc[256];
+            int threshold_pct, time_limit;
+            
+            char *token = strtok(buffer, "|");
+            if (token) {
+                round_id = atoi(token);
+                qDebug() << "Round ID:" << round_id;
+                
+                token = strtok(NULL, "|");
+                if (token) {
+                    strcpy(round_type, token);
+                    qDebug() << "Round Type:" << round_type;
+                }
+                
+                token = strtok(NULL, "|");
+                if (token) {
+                    strcpy(product_name, token);
+                    qDebug() << "Product Name:" << product_name;
+                }
+                
+                token = strtok(NULL, "|");
+                if (token) {
+                    strcpy(product_desc, token);
+                    qDebug() << "Product Desc:" << product_desc;
+                }
+                
+                token = strtok(NULL, "|");
+                if (token) {
+                    threshold_pct = atoi(token);
+                    qDebug() << "Threshold %:" << threshold_pct;
+                }
+                
+                token = strtok(NULL, "|");
+                if (token) {
+                    time_limit = atoi(token);
+                    qDebug() << "Time Limit:" << time_limit;
+                }
+                
+                qDebug() << "Emitting roundStart signal...";
+                emit BackEnd::instance->roundStart(round_id,
+                    QString::fromUtf8(round_type),
+                    QString::fromUtf8(product_name),
+                    QString::fromUtf8(product_desc),
+                    threshold_pct,
+                    time_limit);
+            } else {
+                qDebug() << "ERROR: Failed to parse ROUND_START!";
+            }
+        }
+        else if (msg.type == ROUND_RESULT) {
+            emit BackEnd::instance->roundResult(QString::fromUtf8(msg.value));
+        }
         else if (msg.type == GAME_END) {
             emit BackEnd::instance->gameEnd(QString::fromUtf8(msg.value));
         }
@@ -435,3 +496,17 @@ void BackEnd::submitAnswer(int roundId, QString answer)
         qDebug() << "Failed to submit answer!";
     }
 }
+
+void BackEnd::submitPrice(int roundId, int guessedPrice)
+{
+    qDebug() << "Submitting price for round" << roundId << ":" << guessedPrice;
+    
+    int result = submit_price(roundId, guessedPrice);
+    
+    if (result == PRICE_SUBMIT) {
+        qDebug() << "Price submitted successfully!";
+    } else {
+        qDebug() << "Failed to submit price!";
+    }
+}
+
