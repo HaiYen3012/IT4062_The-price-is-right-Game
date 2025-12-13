@@ -9,11 +9,12 @@ Page {
     
     property var backend: null
     property var rankings: []
+    property int roundNumber: 1  // Round number (1, 2, 3, ...)
     
     Component.onCompleted: {
-        console.log("RankingPage loaded with", rankings.length, "players");
+        console.log("RankingPage loaded with", rankings.length, "players, after Round", roundNumber);
         
-        // Kết nối signal để tự động chuyển sang Round 2 khi server gửi ROUND_START
+        // Kết nối signal để tự động chuyển sang Round tiếp theo khi server gửi ROUND_START
         if (backend) {
             backend.roundStart.connect(handleRoundStart);
             console.log("RankingPage: Connected to roundStart signal");
@@ -111,7 +112,7 @@ Page {
                 }
                 
                 Text {
-                    text: "FINAL RANKING"
+                    text: "ROUND " + roundNumber + " RANKING"
                     font.pixelSize: 36
                     font.bold: true
                     color: "white"
@@ -280,7 +281,7 @@ Page {
                 }
                 
                 Text {
-                    text: "Đang chờ Round 2 bắt đầu..."
+                    text: "Waiting for Round " + (roundNumber + 1) + " to start..."
                     font.pixelSize: 20
                     font.bold: true
                     color: "white"

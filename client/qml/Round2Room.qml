@@ -62,7 +62,8 @@ Page {
             var data = JSON.parse(rankingData);
             stackView.push("qrc:/qml/RankingPage.qml", { 
                 backend: backend,
-                rankings: data.players 
+                rankings: data.players,
+                roundNumber: 2  // Round 2 ranking
             });
         } catch (e) {
             console.error("Failed to parse ranking data:", e);
@@ -342,7 +343,7 @@ Page {
                     
                     Text {
                         anchors.centerIn: parent
-                        text: "ĐOÁN GIÁ SẢN PHẨM"
+                        text: "GUESS THE PRICE"
                         font.pixelSize: 14
                         font.bold: true
                         color: "#7C3AED"
@@ -352,7 +353,7 @@ Page {
                 
                 Text {
                     Layout.fillWidth: true
-                    text: productName || "Đang tải..."
+                    text: productName || "Loading..."
                     font.pixelSize: 32
                     font.bold: true
                     color: "white"
@@ -376,7 +377,7 @@ Page {
                 
                 Text {
                     Layout.fillWidth: true
-                    text: "Lệch không quá ±" + thresholdPct + "%"
+                    text: "Within ±" + thresholdPct + "%"
                     font.pixelSize: 16
                     font.bold: true
                     color: "white"
@@ -407,7 +408,7 @@ Page {
                 spacing: 20
                 
                 Text {
-                    text: "Nhập giá dự đoán"
+                    text: "Enter Your Price Guess"
                     font.pixelSize: 24
                     font.bold: true
                     color: "white"
@@ -432,7 +433,7 @@ Page {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             text: ""
-                            placeholderText: "Nhập giá (VND)..."
+                            placeholderText: "Enter price (VND)..."
                             font.pixelSize: 32
                             font.bold: true
                             color: "#7C3AED"
@@ -483,7 +484,7 @@ Page {
                     }
                     
                     contentItem: Text {
-                        text: priceSubmitted ? "✓ ĐÃ GỬI" : "GỬI DỰ ĐOÁN"
+                        text: priceSubmitted ? "✓ SUBMITTED" : "SUBMIT GUESS"
                         font.pixelSize: 20
                         font.bold: true
                         color: "white"
@@ -495,7 +496,7 @@ Page {
                 }
                 
                 Text {
-                    text: priceSubmitted ? "Đang chờ kết quả..." : ""
+                    text: priceSubmitted ? "Waiting for result..." : ""
                     font.pixelSize: 16
                     font.italic: true
                     color: "#FCD34D"
@@ -537,7 +538,7 @@ Page {
                         spacing: 15
                         
                         Text {
-                            text: "GIÁ THỰC:"
+                            text: "ACTUAL PRICE:"
                             font.pixelSize: 16
                             font.bold: true
                             color: "white"
@@ -607,7 +608,7 @@ Page {
                                     }
                                     
                                     Text {
-                                        text: "Dự đoán: " + modelData.guessed_price.toLocaleString(Qt.locale(), 'f', 0)
+                                        text: "Guess: " + modelData.guessed_price.toLocaleString(Qt.locale(), 'f', 0)
                                         font.pixelSize: 9
                                         color: "#E5E7EB"
                                         Layout.alignment: Qt.AlignHCenter

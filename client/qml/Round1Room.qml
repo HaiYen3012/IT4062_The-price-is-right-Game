@@ -141,7 +141,8 @@ Page {
             var data = JSON.parse(rankingData);
             stackView.push("qrc:/qml/RankingPage.qml", { 
                 backend: backend,
-                rankings: data.players 
+                rankings: data.players,
+                roundNumber: 1  // Round 1 ranking
             });
         } catch (e) {
             console.error("Failed to parse ranking data:", e);
