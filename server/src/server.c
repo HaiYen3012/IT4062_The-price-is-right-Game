@@ -1,6 +1,7 @@
 // server/src/server.c
 #include "server.h"
 #include "database.h"
+#include <math.h>
 
 // Global variables
 Client *head_client = NULL;
@@ -542,6 +543,13 @@ void *handle_client(void *arg)
             case ANSWER_SUBMIT:
                 {
                     result = handle_answer_submit(cli, msg.value);
+                    // Result is broadcasted to all players after all answers or timeout
+                }
+                break;
+                
+            case PRICE_SUBMIT:
+                {
+                    result = handle_price_submit(cli, msg.value);
                     // Result is broadcasted to all players after all answers or timeout
                 }
                 break;
@@ -1811,9 +1819,16 @@ void start_round1(int room_id)
     
     printf("\n=== Round 1 Complete! All 3 questions finished ===\n");
     
-    // Wait 5 seconds then show final ranking
+    // Wait 5 seconds then show Round 1 ranking
     sleep(5);
     broadcast_final_ranking(room_id, match_id);
+    
+    // Wait 8 seconds then start Round 2
+    printf("Waiting 8 seconds before starting Round 2...\n");
+    sleep(8);
+    
+    // Start Round 2
+    start_round2(room_id, match_id);
 }
 
 int handle_answer_submit(Client *cli, char answer[])
@@ -2085,6 +2100,376 @@ void broadcast_final_ranking(int room_id, int match_id)
             int target_fd = (tmp->async_conn_fd >= 0) ? tmp->async_conn_fd : tmp->conn_fd;
             send(target_fd, &msg, sizeof(Message), 0);
             printf("Sent GAME_END (Final Ranking) to %s (fd=%d)\n", tmp->login_account, target_fd);
+        }
+        tmp = tmp->next;
+    }
+    
+    pthread_mutex_unlock(&mutex);
+}
+
+// ==================== ROUND 2 GAME LOGIC ====================
+
+void start_round2(int room_id, int match_id)
+{
+    pthread_mutex_lock(&mutex);
+    
+    printf("\n=== Starting Round 2 (Price Guessing with %% Threshold) ===\n");
+    
+    char query[2048];
+    
+    // Get a random product from the products table
+    sprintf(query, 
+        "SELECT product_id, name, description, base_price "
+        "FROM products "
+        "ORDER BY RAND() LIMIT 1");
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        fprintf(stderr, "Failed to get product: %s\n", mysql_error(g_db_conn));
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
+    
+    MYSQL_RES *res = mysql_store_result(g_db_conn);
+    MYSQL_ROW row = mysql_fetch_row(res);
+    
+    if (row == NULL) {
+        fprintf(stderr, "No products found in database!\n");
+        mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
+    
+    int product_id = atoi(row[0]);
+    char *product_name = row[1];
+    char *product_desc = row[2];
+    int base_price = atoi(row[3]);
+    
+    printf("Product: %s - %s (Price: %d VND)\n", product_name, product_desc, base_price);
+    
+    // Create round in database with 10% threshold
+    sprintf(query, 
+        "INSERT INTO rounds (match_id, round_number, round_type, time_limit_sec, threshold_pct, started_at) "
+        "VALUES (%d, 2, 'V2', 20, 10.00, NOW())", 
+        match_id);
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        fprintf(stderr, "Failed to create round: %s\n", mysql_error(g_db_conn));
+        mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
+    
+    int round_id = mysql_insert_id(g_db_conn);
+    printf("Created Round 2 (round_id=%d) for match %d\n", round_id, match_id);
+    
+    // Link product to round
+    sprintf(query, 
+        "INSERT INTO round_products (round_id, product_id, display_order) "
+        "VALUES (%d, %d, 1)", 
+        round_id, product_id);
+    mysql_query(g_db_conn, query);
+    
+    mysql_free_result(res);
+    
+    // Prepare message to broadcast
+    Message msg;
+    msg.type = ROUND_START;
+    
+    // Format: round_id|round_type|product_name|product_desc|threshold_pct|time_limit
+    sprintf(msg.value, "%d|V2|%s|%s|10|20", 
+            round_id, product_name, product_desc);
+    
+    // Broadcast to all players in room
+    Client *tmp = head_client;
+    while (tmp != NULL) {
+        if (tmp->room_id == room_id && tmp->login_status == AUTH) {
+            int target_fd = (tmp->async_conn_fd >= 0) ? tmp->async_conn_fd : tmp->conn_fd;
+            send(target_fd, &msg, sizeof(Message), 0);
+            printf("Sent ROUND_START (V2) to %s (fd=%d)\n", tmp->login_account, target_fd);
+        }
+        tmp = tmp->next;
+    }
+    
+    pthread_mutex_unlock(&mutex);
+    
+    // Wait for answers (20 seconds)
+    printf("Waiting for price guesses (max 20 seconds)...\n");
+    
+    for (int i = 0; i < 20; i++) {
+        sleep(1);
+        
+        // Check progress
+        pthread_mutex_lock(&mutex);
+        
+        sprintf(query, 
+            "SELECT COUNT(DISTINCT rm.user_id) AS total_players, "
+            "COUNT(DISTINCT ra.user_id) AS answered_players "
+            "FROM rounds r "
+            "JOIN matches m ON r.match_id = m.match_id "
+            "JOIN room_members rm ON m.room_id = rm.room_id AND rm.left_at IS NULL "
+            "LEFT JOIN round_answers ra ON r.round_id = ra.round_id "
+            "WHERE r.round_id = %d", round_id);
+        
+        if (mysql_query(g_db_conn, query) == 0) {
+            MYSQL_RES *check_res = mysql_store_result(g_db_conn);
+            MYSQL_ROW check_row = mysql_fetch_row(check_res);
+            
+            if (check_row != NULL) {
+                int total_players = atoi(check_row[0]);
+                int answered_players = atoi(check_row[1]);
+                
+                printf("Progress Round 2: %d/%d players answered (after %d seconds)\n", 
+                       answered_players, total_players, i + 1);
+            }
+            mysql_free_result(check_res);
+        }
+        
+        pthread_mutex_unlock(&mutex);
+    }
+    
+    printf("Time's up for Round 2! Broadcasting results.\n");
+    
+    // Broadcast results
+    broadcast_round2_result(room_id, round_id);
+    
+    // Wait 8 seconds before showing final ranking
+    printf("Waiting 8 seconds before final ranking...\n");
+    sleep(8);
+    
+    // Show final ranking after Round 2
+    broadcast_final_ranking(room_id, match_id);
+}
+
+int handle_price_submit(Client *cli, char price_data[])
+{
+    pthread_mutex_lock(&mutex);
+    
+    // Parse: round_id|guessed_price
+    int round_id;
+    int guessed_price;
+    
+    if (sscanf(price_data, "%d|%d", &round_id, &guessed_price) != 2) {
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
+    
+    printf("[%d] Price submitted for round %d: %d VND\n", cli->conn_fd, round_id, guessed_price);
+    
+    // Get user_id
+    char query[2048];
+    sprintf(query, "SELECT user_id FROM users WHERE username = '%s'", cli->login_account);
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
+    
+    MYSQL_RES *res = mysql_store_result(g_db_conn);
+    MYSQL_ROW row = mysql_fetch_row(res);
+    
+    if (row == NULL) {
+        mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
+    
+    int user_id = atoi(row[0]);
+    mysql_free_result(res);
+    
+    // Check if already answered
+    sprintf(query, "SELECT answer_id FROM round_answers WHERE round_id = %d AND user_id = %d", 
+            round_id, user_id);
+    
+    if (mysql_query(g_db_conn, query) == 0) {
+        res = mysql_store_result(g_db_conn);
+        row = mysql_fetch_row(res);
+        
+        if (row != NULL) {
+            // Already answered
+            mysql_free_result(res);
+            pthread_mutex_unlock(&mutex);
+            return SYSTEM_ERROR;
+        }
+        mysql_free_result(res);
+    }
+    
+    // Get round info and actual price
+    sprintf(query, 
+        "SELECT r.started_at, r.threshold_pct, p.base_price "
+        "FROM rounds r "
+        "JOIN round_products rp ON r.round_id = rp.round_id "
+        "JOIN products p ON rp.product_id = p.product_id "
+        "WHERE r.round_id = %d", round_id);
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
+    
+    res = mysql_store_result(g_db_conn);
+    row = mysql_fetch_row(res);
+    
+    if (row == NULL) {
+        mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
+    
+    char *started_at = row[0];
+    float threshold_pct = atof(row[1]);
+    int actual_price = atoi(row[2]);
+    mysql_free_result(res);
+    
+    // Calculate elapsed time in milliseconds
+    sprintf(query, "SELECT TIMESTAMPDIFF(MICROSECOND, '%s', NOW()) / 1000", started_at);
+    
+    int time_ms = 0;
+    if (mysql_query(g_db_conn, query) == 0) {
+        res = mysql_store_result(g_db_conn);
+        row = mysql_fetch_row(res);
+        if (row != NULL) {
+            time_ms = atoi(row[0]);
+        }
+        mysql_free_result(res);
+    }
+    
+    // Calculate percentage difference
+    float diff_pct = fabs((float)(guessed_price - actual_price) / actual_price) * 100.0;
+    
+    // Check if within threshold
+    int is_correct = (diff_pct <= threshold_pct) ? 1 : 0;
+    
+    // Calculate score
+    int score_awarded = 0;
+    if (is_correct) {
+        // Base score for being within threshold
+        int base_score = 100;
+        
+        // Accuracy bonus: the closer to actual price, the higher the bonus
+        // Max 100 bonus points for exact match, scaling down based on % difference
+        int accuracy_bonus = (int)(100.0 * (1.0 - (diff_pct / threshold_pct)));
+        
+        // Speed bonus
+        int max_time = 20000; // 20 seconds in ms
+        int elapsed_time = time_ms;
+        if (elapsed_time > max_time) elapsed_time = max_time;
+        int speed_bonus = ((max_time - elapsed_time) * 50) / max_time;
+        
+        score_awarded = base_score + accuracy_bonus + speed_bonus;
+    }
+    
+    printf("Guessed: %d, Actual: %d, Diff: %.2f%%, Within %.2f%%? %s, Score: %d\n", 
+           guessed_price, actual_price, diff_pct, threshold_pct, 
+           is_correct ? "YES" : "NO", score_awarded);
+    
+    // Save answer to database
+    sprintf(query, 
+        "INSERT INTO round_answers "
+        "(round_id, user_id, answer_price, is_correct, score_awarded, time_ms, answer_timestamp) "
+        "VALUES (%d, %d, %d, %d, %d, %d, NOW())",
+        round_id, user_id, guessed_price, is_correct, score_awarded, time_ms);
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        fprintf(stderr, "Failed to save price answer: %s\n", mysql_error(g_db_conn));
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
+    
+    pthread_mutex_unlock(&mutex);
+    
+    printf("[%d] Price answer saved successfully\n", cli->conn_fd);
+    
+    return PRICE_SUBMIT;
+}
+
+void broadcast_round2_result(int room_id, int round_id)
+{
+    pthread_mutex_lock(&mutex);
+    
+    printf("Broadcasting Round 2 result for round %d in room %d\n", round_id, room_id);
+    
+    // Mark round as ended
+    char query[2048];
+    sprintf(query, "UPDATE rounds SET ended_at = NOW() WHERE round_id = %d AND ended_at IS NULL", 
+            round_id);
+    mysql_query(g_db_conn, query);
+    
+    // Get actual price and threshold
+    sprintf(query, 
+        "SELECT p.base_price, r.threshold_pct "
+        "FROM rounds r "
+        "JOIN round_products rp ON r.round_id = rp.round_id "
+        "JOIN products p ON rp.product_id = p.product_id "
+        "WHERE r.round_id = %d", round_id);
+    
+    int actual_price = 0;
+    float threshold_pct = 10.0;
+    
+    if (mysql_query(g_db_conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(g_db_conn);
+        MYSQL_ROW row = mysql_fetch_row(res);
+        if (row != NULL) {
+            actual_price = atoi(row[0]);
+            threshold_pct = atof(row[1]);
+        }
+        mysql_free_result(res);
+    }
+    
+    // Get all players' cumulative scores (sum of ALL rounds in this match)
+    sprintf(query, 
+        "SELECT u.username, "
+        "COALESCE((SELECT SUM(ra.score_awarded) "
+        "          FROM rounds r2 "
+        "          JOIN round_answers ra ON ra.round_id = r2.round_id "
+        "          WHERE r2.match_id = m.match_id AND ra.user_id = u.user_id), 0) AS total_score, "
+        "COALESCE(ra_current.answer_price, 0) AS guessed_price, "
+        "COALESCE(ra_current.is_correct, 0) AS is_correct "
+        "FROM room_members rm "
+        "JOIN users u ON rm.user_id = u.user_id "
+        "JOIN rounds r ON r.round_id = %d "
+        "JOIN matches m ON r.match_id = m.match_id AND m.room_id = rm.room_id "
+        "LEFT JOIN round_answers ra_current ON ra_current.round_id = r.round_id AND ra_current.user_id = u.user_id "
+        "WHERE rm.left_at IS NULL "
+        "ORDER BY total_score DESC", round_id);
+    
+    char result_json[BUFF_SIZE];
+    sprintf(result_json, "{\"actual_price\":%d,\"threshold\":%.1f,\"players\":[", 
+            actual_price, threshold_pct);
+    
+    if (mysql_query(g_db_conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(g_db_conn);
+        MYSQL_ROW row;
+        int first = 1;
+        
+        while ((row = mysql_fetch_row(res)) != NULL) {
+            if (!first) strcat(result_json, ",");
+            first = 0;
+            
+            char player_json[512];
+            sprintf(player_json, 
+                "{\"username\":\"%s\",\"score\":%s,\"guessed_price\":%s,\"is_correct\":%s}", 
+                row[0], row[1], row[2], row[3]);
+            strcat(result_json, player_json);
+        }
+        
+        mysql_free_result(res);
+    }
+    
+    strcat(result_json, "]}");
+    
+    printf("Round 2 Result JSON: %s\n", result_json);
+    
+    // Broadcast result to all players in room
+    Message msg;
+    msg.type = ROUND_RESULT;
+    strcpy(msg.value, result_json);
+    
+    Client *tmp = head_client;
+    while (tmp != NULL) {
+        if (tmp->room_id == room_id && tmp->login_status == AUTH) {
+            int target_fd = (tmp->async_conn_fd >= 0) ? tmp->async_conn_fd : tmp->conn_fd;
+            send(target_fd, &msg, sizeof(Message), 0);
+            printf("Sent ROUND_RESULT to %s (fd=%d)\n", tmp->login_account, target_fd);
         }
         tmp = tmp->next;
     }

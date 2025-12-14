@@ -42,6 +42,7 @@ public:
     Q_INVOKABLE void startGame();
     Q_INVOKABLE QString getRoomInfo();
     Q_INVOKABLE void submitAnswer(int roundId, QString answer);
+    Q_INVOKABLE void submitPrice(int roundId, int guessedPrice);
 
 signals:
     void userNameChanged();
@@ -72,6 +73,8 @@ signals:
     void startGameFail();
     void questionStart(int roundId, QString question, QString optionA, QString optionB, QString optionC, QString optionD);
     void questionResult(QString resultData);
+    void roundStart(int roundId, QString roundType, QString productName, QString productDesc, int thresholdPct, int timeLimit);
+    void roundResult(QString resultData);
     void gameEnd(QString rankingData);
 
 private:

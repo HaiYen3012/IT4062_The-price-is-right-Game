@@ -69,10 +69,12 @@ enum msg_type
   GAME_START_NOTIFY,
   ROUND_INFO,
   ROUND_ANSWER,
-  ROUND_RESULT,
   QUESTION_START,
   ANSWER_SUBMIT,
   QUESTION_RESULT,
+  ROUND_START,
+  PRICE_SUBMIT,
+  ROUND_RESULT,
   PLAYER_FORFEIT,
   PLAYER_FORFEIT_NOTIFY,
   GAME_END,
@@ -131,6 +133,8 @@ int start_game();
 int get_room_info(char buffer[], int bufsize);
 // Round 1 functions
 int submit_answer(int round_id, char answer_choice[]);
+// Round 2 functions
+int submit_price(int round_id, int guessed_price);
 // Message listener
 void set_message_callback(MessageCallback callback);
 void start_message_listener();
