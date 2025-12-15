@@ -8,6 +8,8 @@ Môi trường:
 * **Ubuntu 20.04+ (Native hoặc WSL2)**
 * **MySQL Server 8.x**
 
+> **📝 Lưu ý:** File `seed_data.sql` đã bao gồm đầy đủ dữ liệu mẫu kèm ảnh sản phẩm. Không cần file update riêng!
+
 ---
 
 # 🧩 1. Cài đặt MySQL & thư viện cần thiết
