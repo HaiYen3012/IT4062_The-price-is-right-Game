@@ -11,6 +11,7 @@ Page {
     property int round2Id: 0
     property string productName: ""
     property string productDesc: ""
+    property string productImage: ""
     property int thresholdPct: 10
     property int timeLimit: 20
     property int timeRemaining: 20
@@ -70,11 +71,12 @@ Page {
         }
     }
     
-    function handleRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit_) {
+    function handleRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit_, imageUrl) {
         console.log("=== Round 2 Start ===");
         console.log("Round:", roundId, "Type:", roundType);
         console.log("Product:", prodName, "-", prodDesc);
         console.log("Threshold:", threshold, "% Time:", timeLimit_, "s");
+        console.log("Image URL:", imageUrl);
         
         // Stop timer
         countdownTimer.running = false;
@@ -83,6 +85,7 @@ Page {
         round2Id = roundId;
         productName = prodName;
         productDesc = prodDesc;
+        productImage = imageUrl || "";
         thresholdPct = threshold;
         timeLimit = timeLimit_;
         timeRemaining = timeLimit_;
@@ -189,14 +192,14 @@ Page {
     // Main layout
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 20
-        spacing: 15
+        anchors.margins: 15
+        spacing: 8
         z: 1
         
         // Header: Logo and Timer
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 80
+            Layout.preferredHeight: 70
             spacing: 20
             
             Item { Layout.fillWidth: true }
@@ -204,7 +207,7 @@ Page {
             // The Price is Right Logo
             Rectangle {
                 Layout.preferredWidth: 400
-                Layout.preferredHeight: 80
+                Layout.preferredHeight: 70
                 radius: 15
                 
                 gradient: Gradient {
@@ -263,12 +266,12 @@ Page {
             
             // Timer Circle
             Rectangle {
-                Layout.preferredWidth: 100
-                Layout.preferredHeight: 100
-                radius: 50
+                Layout.preferredWidth: 80
+                Layout.preferredHeight: 80
+                radius: 40
                 color: timeRemaining <= 5 ? "#FF4757" : "#6C5CE7"
                 border.color: "white"
-                border.width: 5
+                border.width: 4
                 
                 // Shadow effect
                 layer.enabled: true
@@ -288,7 +291,7 @@ Page {
                     
                     Text {
                         text: timeRemaining
-                        font.pixelSize: 48
+                        font.pixelSize: 40
                         font.bold: true
                         color: "white"
                         Layout.alignment: Qt.AlignHCenter
@@ -296,7 +299,7 @@ Page {
                     
                     Text {
                         text: "SEC"
-                        font.pixelSize: 12
+                        font.pixelSize: 10
                         font.bold: true
                         color: "white"
                         Layout.alignment: Qt.AlignHCenter
@@ -316,7 +319,7 @@ Page {
         // Product Display
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 120
+            Layout.preferredHeight: 160
             radius: 20
             
             gradient: Gradient {
@@ -327,64 +330,111 @@ Page {
             border.color: "#FCD34D"
             border.width: 4
             
-            ColumnLayout {
+            RowLayout {
                 anchors.fill: parent
                 anchors.margins: 15
-                spacing: 8
-                z: 10
+                spacing: 15
                 
+                // Product Image
                 Rectangle {
-                    Layout.preferredWidth: 200
-                    Layout.preferredHeight: 30
-                    radius: 15
-                    color: "#FCD34D"
-                    Layout.alignment: Qt.AlignHCenter
-                    z: 10
+                    Layout.preferredWidth: 140
+                    Layout.fillHeight: true
+                    radius: 12
+                    color: "white"
+                    border.color: "#FCD34D"
+                    border.width: 3
                     
-                    Text {
-                        anchors.centerIn: parent
-                        text: "GUESS THE PRICE"
-                        font.pixelSize: 14
-                        font.bold: true
-                        color: "#7C3AED"
-                        z: 11
+                    Image {
+                        anchors.fill: parent
+                        anchors.margins: 3
+                        source: productImage || ""
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        asynchronous: true
+                        
+                        onStatusChanged: {
+                            console.log("Image status:", status, "URL:", productImage)
+                        }
+                        
+                        Rectangle {
+                            anchors.fill: parent
+                            color: "transparent"
+                            visible: parent.status === Image.Loading
+                            
+                            Text {
+                                anchors.centerIn: parent
+                                text: "⏳"
+                                color: "#7C3AED"
+                                font.pixelSize: 30
+                            }
+                        }
+                        
+                        Rectangle {
+                            anchors.fill: parent
+                            color: "white"
+                            visible: parent.status === Image.Error || productImage === ""
+                            
+                            Text {
+                                anchors.centerIn: parent
+                                text: "📦"
+                                font.pixelSize: 50
+                            }
+                        }
                     }
                 }
                 
-                Text {
+                // Product Info
+                ColumnLayout {
                     Layout.fillWidth: true
-                    text: productName || "Loading..."
-                    font.pixelSize: 32
-                    font.bold: true
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    style: Text.Outline
-                    styleColor: "#7C3AED"
-                    z: 10
-                }
-                
-                Text {
-                    Layout.fillWidth: true
-                    text: productDesc || "..."
-                    font.pixelSize: 18
-                    font.bold: true
-                    color: "#FCD34D"
-                    horizontalAlignment: Text.AlignHCenter
-                    style: Text.Outline
-                    styleColor: "#7C3AED"
-                    z: 10
-                }
-                
-                Text {
-                    Layout.fillWidth: true
-                    text: "Within ±" + thresholdPct + "%"
-                    font.pixelSize: 16
-                    font.bold: true
-                    color: "white"
-                    horizontalAlignment: Text.AlignHCenter
-                    style: Text.Outline
-                    styleColor: "#6D28D9"
-                    z: 10
+                    Layout.fillHeight: true
+                    spacing: 5
+                    
+                    Rectangle {
+                        Layout.preferredWidth: 180
+                        Layout.preferredHeight: 30
+                        radius: 15
+                        color: "#FCD34D"
+                        Layout.alignment: Qt.AlignHCenter
+                        
+                        Text {
+                            anchors.centerIn: parent
+                            text: "GUESS THE PRICE"
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: "#7C3AED"
+                        }
+                    }
+                    
+                    Text {
+                        Layout.fillWidth: true
+                        text: productName || "Loading..."
+                        font.pixelSize: 26
+                        font.bold: true
+                        color: "white"
+                        horizontalAlignment: Text.AlignHCenter
+                        style: Text.Outline
+                        styleColor: "#7C3AED"
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
+                    }
+                    
+                    Text {
+                        Layout.fillWidth: true
+                        text: productDesc || "..."
+                        font.pixelSize: 13
+                        color: "#FCD34D"
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                    }
+                    
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Within ±" + thresholdPct + "%"
+                        font.pixelSize: 13
+                        font.bold: true
+                        color: "#E0E7FF"
+                        horizontalAlignment: Text.AlignHCenter
+                    }
                 }
             }
         }
@@ -392,12 +442,12 @@ Page {
         // Price Input
         Rectangle {
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            Layout.preferredHeight: 165
             radius: 20
             
             gradient: Gradient {
-                GradientStop { position: 0.0; color: "#7C3AED" }
-                GradientStop { position: 1.0; color: "#A78BFA" }
+                GradientStop { position: 0.0; color: "#6366F1" }
+                GradientStop { position: 1.0; color: "#8B5CF6" }
             }
             
             border.color: priceSubmitted ? "#10B981" : "#FCD34D"
@@ -405,27 +455,30 @@ Page {
             
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 20
+                spacing: 10
                 
                 Text {
                     text: "Enter Your Price Guess"
-                    font.pixelSize: 24
+                    font.pixelSize: 22
                     font.bold: true
                     color: "white"
                     Layout.alignment: Qt.AlignHCenter
+                    style: Text.Outline
+                    styleColor: "#4C1D95"
                 }
                 
                 Rectangle {
-                    Layout.preferredWidth: 400
-                    Layout.preferredHeight: 80
-                    radius: 15
+                    Layout.preferredWidth: 420
+                    Layout.preferredHeight: 65
+                    radius: 16
                     color: "white"
-                    border.color: "#7C3AED"
+                    border.color: priceInput.activeFocus ? "#10B981" : "#7C3AED"
                     border.width: 3
+                    Layout.alignment: Qt.AlignHCenter
                     
                     RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 10
+                        anchors.margins: 15
                         spacing: 10
                         
                         TextField {
@@ -440,6 +493,8 @@ Page {
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             enabled: !priceSubmitted && !showResult
+                            leftPadding: 10
+                            rightPadding: 10
                             
                             validator: IntValidator {
                                 bottom: 0
@@ -464,7 +519,7 @@ Page {
                         
                         Text {
                             text: "đ"
-                            font.pixelSize: 24
+                            font.pixelSize: 26
                             font.bold: true
                             color: "#7C3AED"
                         }
@@ -472,20 +527,21 @@ Page {
                 }
                 
                 Button {
-                    Layout.preferredWidth: 300
-                    Layout.preferredHeight: 60
+                    Layout.preferredWidth: 250
+                    Layout.preferredHeight: 48
+                    Layout.alignment: Qt.AlignHCenter
                     enabled: !priceSubmitted && !showResult && guessedPrice > 0
                     
                     background: Rectangle {
                         color: parent.enabled ? (parent.hovered ? "#6D28D9" : "#7C3AED") : "#9CA3AF"
-                        radius: 15
+                        radius: 16
                         border.color: "#FCD34D"
                         border.width: 3
                     }
                     
                     contentItem: Text {
                         text: priceSubmitted ? "✓ SUBMITTED" : "SUBMIT GUESS"
-                        font.pixelSize: 20
+                        font.pixelSize: 18
                         font.bold: true
                         color: "white"
                         horizontalAlignment: Text.AlignHCenter
@@ -493,22 +549,35 @@ Page {
                     }
                     
                     onClicked: submitPriceGuess()
+                    
+                    scale: hovered && enabled ? 1.05 : 1.0
+                    Behavior on scale {
+                        NumberAnimation { duration: 150 }
+                    }
                 }
                 
                 Text {
-                    text: priceSubmitted ? "Waiting for result..." : ""
-                    font.pixelSize: 16
+                    text: priceSubmitted ? "⏳ Waiting for other players..." : ""
+                    font.pixelSize: 13
                     font.italic: true
                     color: "#FCD34D"
                     Layout.alignment: Qt.AlignHCenter
+                    visible: priceSubmitted && !showResult
+                    
+                    SequentialAnimation on opacity {
+                        loops: Animation.Infinite
+                        running: priceSubmitted && !showResult
+                        NumberAnimation { from: 1.0; to: 0.3; duration: 800 }
+                        NumberAnimation { from: 0.3; to: 1.0; duration: 800 }
+                    }
                 }
             }
         }
         
-        // Result and Leaderboard
+        // Result and Leaderboard (Footer giống Room 1)
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 120
+            Layout.preferredHeight: 80
             color: "#1F2937"
             radius: 10
             border.color: showResult ? "#10B981" : "#6B7280"
@@ -519,42 +588,45 @@ Page {
                 NumberAnimation { duration: 300 }
             }
             
-            ColumnLayout {
+            RowLayout {
                 anchors.fill: parent
                 anchors.margins: 10
                 spacing: 10
                 
                 // Actual Price Display
                 Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 50
-                    color: "#7C3AED"
+                    Layout.preferredWidth: 200
+                    Layout.fillHeight: true
+                    color: "#10B981"
                     radius: 8
-                    border.color: "#FCD34D"
+                    border.color: "#059669"
                     border.width: 3
                     
-                    RowLayout {
+                    ColumnLayout {
                         anchors.centerIn: parent
-                        spacing: 15
+                        spacing: 2
                         
                         Text {
-                            text: "ACTUAL PRICE:"
-                            font.pixelSize: 16
+                            text: "💰 ACTUAL PRICE"
+                            font.pixelSize: 11
                             font.bold: true
                             color: "white"
+                            Layout.alignment: Qt.AlignHCenter
                         }
                         
                         Text {
                             text: actualPrice.toLocaleString(Qt.locale(), 'f', 0) + " đ"
-                            font.pixelSize: 24
+                            font.pixelSize: 18
                             font.bold: true
                             color: "#FCD34D"
+                            Layout.alignment: Qt.AlignHCenter
                         }
                         
                         Text {
                             text: "(±" + thresholdPct + "%)"
-                            font.pixelSize: 14
-                            color: "#E0E7FF"
+                            font.pixelSize: 10
+                            color: "#D1FAE5"
+                            Layout.alignment: Qt.AlignHCenter
                         }
                     }
                 }
@@ -582,7 +654,7 @@ Page {
                             model: playerScores
                             
                             Rectangle {
-                                Layout.preferredWidth: 120
+                                Layout.preferredWidth: 100
                                 Layout.fillHeight: true
                                 color: modelData.is_correct ? "#10B981" : "#6B7280"
                                 radius: 5
@@ -592,7 +664,7 @@ Page {
                                     spacing: 0
                                     
                                     Text {
-                                        text: modelData.username
+                                        text: modelData.is_correct ? "✓ " + modelData.username : modelData.username
                                         font.pixelSize: 10
                                         font.bold: true
                                         color: "white"
@@ -608,13 +680,40 @@ Page {
                                     }
                                     
                                     Text {
-                                        text: "Guess: " + modelData.guessed_price.toLocaleString(Qt.locale(), 'f', 0)
+                                        text: modelData.guessed_price ? modelData.guessed_price.toLocaleString(Qt.locale(), 'f', 0) : "0"
                                         font.pixelSize: 9
                                         color: "#E5E7EB"
                                         Layout.alignment: Qt.AlignHCenter
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+                
+                // Leave button
+                Button {
+                    Layout.preferredWidth: 80
+                    Layout.fillHeight: true
+                    text: "LEAVE"
+                    
+                    background: Rectangle {
+                        color: "#DC2626"
+                        radius: 8
+                    }
+                    
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: 12
+                        font.bold: true
+                        color: "white"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    
+                    onClicked: {
+                        if (backend) {
+                            backend.leaveRoom();
                         }
                     }
                 }
