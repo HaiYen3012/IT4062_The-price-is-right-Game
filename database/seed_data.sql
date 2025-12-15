@@ -87,11 +87,11 @@ VALUES
 -- =========================================================
 INSERT INTO products (product_id, name, description, image_url, base_price, created_at)
 VALUES
-  (1, 'Nồi cơm điện',       'Nồi cơm điện 1.8L',                 NULL, 1200000, NOW()),
-  (2, 'Máy sấy tóc',        'Máy sấy tóc mini công suất 1200W', NULL,  250000, NOW()),
-  (3, 'Bình đun siêu tốc',  'Dung tích 1.7L, inox',              NULL,  400000, NOW()),
-  (4, 'Quạt cây',           'Quạt cây 3 tốc độ',                 NULL,  900000, NOW()),
-  (5, 'Tủ lạnh mini',       'Tủ lạnh mini 90L',                  NULL, 3200000, NOW());
+  (1, 'Nồi cơm điện',       'Nồi cơm điện 1.8L',                 'https://cdn.tgdd.vn/Products/Images/1922/236273/noi-com-dien-tu-sharp-18-lit-ks-ih191v-rd-thumb-600x600.jpg', 1200000, NOW()),
+  (2, 'Máy sấy tóc',        'Máy sấy tóc mini công suất 1200W', 'https://cdn.tgdd.vn/Products/Images/1988/236065/may-say-toc-kangaroo-kg616-thumb-600x600.jpg',  250000, NOW()),
+  (3, 'Bình đun siêu tốc',  'Dung tích 1.7L, inox',              'https://cdn.tgdd.vn/Products/Images/1920/107836/binh-dun-sieu-toc-philips-hd9318-17-lit-1-1-600x600.jpg',  400000, NOW()),
+  (4, 'Quạt cây',           'Quạt cây 3 tốc độ',                 'https://cdn.tgdd.vn/Products/Images/7498/271652/quat-cay-asia-d16023-rd-thumb-600x600.jpg',  900000, NOW()),
+  (5, 'Tủ lạnh mini',       'Tủ lạnh mini 90L',                  'https://cdn.tgdd.vn/Products/Images/1943/313107/tu-lanh-mini-aqua-90-lit-aqr-d99fa-bs-thumb-600x600.jpg', 3200000, NOW());
 
 -- =========================================================
 -- 7. MATCHES

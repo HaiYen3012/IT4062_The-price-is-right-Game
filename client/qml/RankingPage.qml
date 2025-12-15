@@ -31,11 +31,12 @@ Page {
     }
     
     // Handler để chuyển sang Round 2 khi nhận ROUND_START từ server
-    function handleRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit) {
+    function handleRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit, imageUrl) {
         console.log("=== RankingPage: ROUND_START received - Switching to Round2Room ===");
         console.log("Round:", roundId, "Type:", roundType);
         console.log("Product:", prodName, "Desc:", prodDesc);
         console.log("Threshold:", threshold, "% Time:", timeLimit, "s");
+        console.log("Image URL:", imageUrl);
         
         // Chuyển sang Round2Room với đầy đủ parameters
         stackView.push("qrc:/qml/Round2Room.qml", {
@@ -45,7 +46,8 @@ Page {
             prodName: prodName,
             prodDesc: prodDesc,
             threshold: threshold,
-            timeLimit_: timeLimit
+            timeLimit_: timeLimit,
+            productImage: imageUrl
         });
     }
     

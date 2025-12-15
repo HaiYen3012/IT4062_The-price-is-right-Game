@@ -94,7 +94,7 @@ static void message_callback_wrapper(Message msg)
             emit BackEnd::instance->questionResult(QString::fromUtf8(msg.value));
         }
         else if (msg.type == ROUND_START) {
-            // Parse: round_id|round_type|product_name|product_desc|threshold_pct|time_limit
+            // Parse: round_id|round_type|product_name|product_desc|threshold_pct|time_limit|image_url
             qDebug() << "ROUND_START received, raw data:" << msg.value;
             
             char buffer[2048];
@@ -102,8 +102,11 @@ static void message_callback_wrapper(Message msg)
             buffer[sizeof(buffer) - 1] = '\0';
             
             int round_id;
-            char round_type[50], product_name[256], product_desc[256];
+            char round_type[50], product_name[256], product_desc[256], image_url[512];
             int threshold_pct, time_limit;
+            
+            // Initialize image_url to empty string
+            image_url[0] = '\0';
             
             char *token = strtok(buffer, "|");
             if (token) {
@@ -140,13 +143,21 @@ static void message_callback_wrapper(Message msg)
                     qDebug() << "Time Limit:" << time_limit;
                 }
                 
+                // Parse image_url (optional field)
+                token = strtok(NULL, "|");
+                if (token) {
+                    strcpy(image_url, token);
+                    qDebug() << "Image URL:" << image_url;
+                }
+                
                 qDebug() << "Emitting roundStart signal...";
                 emit BackEnd::instance->roundStart(round_id,
                     QString::fromUtf8(round_type),
                     QString::fromUtf8(product_name),
                     QString::fromUtf8(product_desc),
                     threshold_pct,
-                    time_limit);
+                    time_limit,
+                    QString::fromUtf8(image_url));
             } else {
                 qDebug() << "ERROR: Failed to parse ROUND_START!";
             }
