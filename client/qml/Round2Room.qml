@@ -8,6 +8,7 @@ Page {
     height: 600
     
     property var backend: null
+    property bool isSpectator: false  // Spectator mode - can only watch, cannot submit price
     property int round2Id: 0
     property string productName: ""
     property string productDesc: ""
@@ -117,6 +118,10 @@ Page {
     }
     
     function submitPriceGuess() {
+        if (isSpectator) {
+            console.log("Spectators cannot submit prices!");
+            return;
+        }
         if (priceSubmitted || showResult || guessedPrice <= 0) return;
         
         console.log("Submitting price guess:", guessedPrice, "for round:", round2Id);
@@ -183,6 +188,49 @@ Page {
                 
                 opacity: 0.3 - index * 0.05
             }
+        }
+    }
+    
+    // Spectator Mode Badge
+    Rectangle {
+        visible: isSpectator
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.margins: 20
+        width: 180
+        height: 50
+        z: 999
+        
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: "#F59E0B" }
+            GradientStop { position: 1.0; color: "#D97706" }
+        }
+        
+        radius: 25
+        border.color: "#FCD34D"
+        border.width: 3
+        
+        RowLayout {
+            anchors.centerIn: parent
+            spacing: 8
+            
+            Text {
+                text: "👁"
+                font.pixelSize: 24
+            }
+            
+            Text {
+                text: "SPECTATOR"
+                font.pixelSize: 16
+                font.bold: true
+                color: "white"
+            }
+        }
+        
+        SequentialAnimation on opacity {
+            loops: Animation.Infinite
+            NumberAnimation { from: 1.0; to: 0.7; duration: 1000 }
+            NumberAnimation { from: 0.7; to: 1.0; duration: 1000 }
         }
     }
     
@@ -400,15 +448,16 @@ Page {
                 GradientStop { position: 1.0; color: "#A78BFA" }
             }
             
-            border.color: priceSubmitted ? "#10B981" : "#FCD34D"
+            border.color: priceSubmitted ? "#10B981" : (isSpectator ? "#F59E0B" : "#FCD34D")
             border.width: 4
+            opacity: isSpectator ? 0.85 : 1.0
             
             ColumnLayout {
                 anchors.centerIn: parent
                 spacing: 20
                 
                 Text {
-                    text: "Enter Your Price Guess"
+                    text: isSpectator ? "🔒 Spectator Mode - Watch Only" : "Enter Your Price Guess"
                     font.pixelSize: 24
                     font.bold: true
                     color: "white"
@@ -433,13 +482,13 @@ Page {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             text: ""
-                            placeholderText: "Enter price (VND)..."
+                            placeholderText: isSpectator ? "Spectators cannot enter price" : "Enter price (VND)..."
                             font.pixelSize: 32
                             font.bold: true
                             color: "#7C3AED"
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
-                            enabled: !priceSubmitted && !showResult
+                            enabled: !isSpectator && !priceSubmitted && !showResult
                             
                             validator: IntValidator {
                                 bottom: 0
@@ -474,7 +523,7 @@ Page {
                 Button {
                     Layout.preferredWidth: 300
                     Layout.preferredHeight: 60
-                    enabled: !priceSubmitted && !showResult && guessedPrice > 0
+                    enabled: !isSpectator && !priceSubmitted && !showResult && guessedPrice > 0
                     
                     background: Rectangle {
                         color: parent.enabled ? (parent.hovered ? "#6D28D9" : "#7C3AED") : "#9CA3AF"

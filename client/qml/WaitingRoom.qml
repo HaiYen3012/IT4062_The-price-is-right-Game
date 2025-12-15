@@ -13,11 +13,14 @@ Page {
     property string hostName: ""
     property bool isHost: false
     property bool isReady: false
+    property bool isSpectator: false
     property var backend: null
     property var roomMembers: []
     
     // Player ready states
     property var playerReadyStates: [true, false, false, false] // Host always ready
+    // Spectator states
+    property var playerSpectatorStates: [false, false, false, false]
     
     // Revision counter to force QML re-render when arrays change
     property int stateRevision: 0
@@ -72,31 +75,35 @@ Page {
     }
     
     function parseRoomState(stateJson) {
-        // Parse UPDATE_ROOM_STATE message: [{"username":"duyen","is_ready":true}, ...]
+        // Parse UPDATE_ROOM_STATE message: [{"username":"duyen","is_ready":true,"is_spectator":false}, ...]
         try {
             var members = JSON.parse(stateJson);
             var newMembers = [];
             var newReadyStates = [];
+            var newSpectatorStates = [];
             
             for (var i = 0; i < members.length; i++) {
                 newMembers.push(members[i].username);
                 newReadyStates.push(members[i].is_ready);
+                newSpectatorStates.push(members[i].is_spectator || false);
                 
-                // Update current user's ready state
+                // Update current user's ready state and spectator status
                 if (members[i].username === backend.user_name) {
                     isReady = members[i].is_ready;
+                    isSpectator = members[i].is_spectator || false;
                 }
             }
             
             // Assign new arrays to trigger property change
             roomMembers = newMembers;
             playerReadyStates = newReadyStates;
+            playerSpectatorStates = newSpectatorStates;
             currentPlayers = roomMembers.length;
             
             // Increment revision to force UI update
             stateRevision++;
             
-            console.log("Room state parsed:", roomMembers, "Ready states:", playerReadyStates);
+            console.log("Room state parsed:", roomMembers, "Ready states:", playerReadyStates, "Spectator states:", playerSpectatorStates);
         } catch (e) {
             console.error("Failed to parse room state:", e, stateJson);
         }
@@ -162,7 +169,10 @@ Page {
                 console.log("Current user:", backend.user_name)
                 console.log("Navigating to Round1Room...")
                 // Navigate to Round 1 game screen
-                stackView.push("qrc:/qml/Round1Room.qml", { backend: backend })
+                stackView.push("qrc:/qml/Round1Room.qml", { 
+                    backend: backend,
+                    isSpectator: isSpectator
+                })
             })
             
             backend.startGameFail.connect(function() {

@@ -8,6 +8,7 @@ Page {
     height: 600
     
     property var backend: null
+    property bool isSpectator: false  // Spectator mode - can only watch, cannot answer
     property int currentRoundId: 0
     property string currentQuestion: ""
     property string optionA: ""
@@ -157,7 +158,8 @@ Page {
         
         // Chuyển sang Round2Room
         stackView.push("qrc:/qml/Round2Room.qml", {
-            backend: backend
+            backend: backend,
+            isSpectator: isSpectator
         });
     }
     
@@ -234,6 +236,10 @@ Page {
     }
     
     function submitAnswer(answer) {
+        if (isSpectator) {
+            console.log("Spectators cannot submit answers!");
+            return;
+        }
         if (answered || showResult) return;
         
         console.log("Submitting answer:", answer, "for round:", currentRoundId);
@@ -302,6 +308,49 @@ Page {
                 
                 opacity: 0.3 - index * 0.05
             }
+        }
+    }
+    
+    // Spectator Mode Badge
+    Rectangle {
+        visible: isSpectator
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.margins: 20
+        width: 180
+        height: 50
+        z: 999
+        
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: "#F59E0B" }
+            GradientStop { position: 1.0; color: "#D97706" }
+        }
+        
+        radius: 25
+        border.color: "#FCD34D"
+        border.width: 3
+        
+        RowLayout {
+            anchors.centerIn: parent
+            spacing: 8
+            
+            Text {
+                text: "👁"
+                font.pixelSize: 24
+            }
+            
+            Text {
+                text: "SPECTATOR"
+                font.pixelSize: 16
+                font.bold: true
+                color: "white"
+            }
+        }
+        
+        SequentialAnimation on opacity {
+            loops: Animation.Infinite
+            NumberAnimation { from: 1.0; to: 0.7; duration: 1000 }
+            NumberAnimation { from: 0.7; to: 1.0; duration: 1000 }
         }
     }
     
@@ -522,12 +571,12 @@ Page {
                     }
                 }
                 
-                border.color: selectedAnswer === "A" ? "#FFD93D" : "white"
-                border.width: selectedAnswer === "A" ? 5 : 4
+                border.color: selectedAnswer === "A" ? "#FFD93D" : (isSpectator ? "#F59E0B" : "white")
+                border.width: selectedAnswer === "A" ? 5 : (isSpectator ? 3 : 4)
                 
                 // Visual effects
                 scale: mouseAreaA.containsMouse && mouseAreaA.enabled ? 1.05 : 1.0
-                opacity: (!mouseAreaA.enabled && !showResult) ? 0.6 : 1.0
+                opacity: (!mouseAreaA.enabled && !showResult) ? 0.6 : (isSpectator ? 0.85 : 1.0)
                 
                 Behavior on scale {
                     NumberAnimation { duration: 100 }
@@ -577,7 +626,7 @@ Page {
                 MouseArea {
                     id: mouseAreaA
                     anchors.fill: parent
-                    enabled: !answered && !showResult && currentQuestion !== ""
+                    enabled: !isSpectator && !answered && !showResult && currentQuestion !== ""
                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     hoverEnabled: true
                     onClicked: submitAnswer("A")
@@ -602,12 +651,12 @@ Page {
                     }
                 }
                 
-                border.color: selectedAnswer === "B" ? "#FFD93D" : "white"
-                border.width: selectedAnswer === "B" ? 5 : 4
+                border.color: selectedAnswer === "B" ? "#FFD93D" : (isSpectator ? "#F59E0B" : "white")
+                border.width: selectedAnswer === "B" ? 5 : (isSpectator ? 3 : 4)
                 
                 // Visual effects
                 scale: mouseAreaB.containsMouse && mouseAreaB.enabled ? 1.05 : 1.0
-                opacity: (!mouseAreaB.enabled && !showResult) ? 0.6 : 1.0
+                opacity: (!mouseAreaB.enabled && !showResult) ? 0.6 : (isSpectator ? 0.85 : 1.0)
                 
                 Behavior on scale {
                     NumberAnimation { duration: 100 }
@@ -657,7 +706,7 @@ Page {
                 MouseArea {
                     id: mouseAreaB
                     anchors.fill: parent
-                    enabled: !answered && !showResult && currentQuestion !== ""
+                    enabled: !isSpectator && !answered && !showResult && currentQuestion !== ""
                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     hoverEnabled: true
                     onClicked: submitAnswer("B")
@@ -682,12 +731,12 @@ Page {
                     }
                 }
                 
-                border.color: selectedAnswer === "C" ? "#FFD93D" : "white"
-                border.width: selectedAnswer === "C" ? 5 : 4
+                border.color: selectedAnswer === "C" ? "#FFD93D" : (isSpectator ? "#F59E0B" : "white")
+                border.width: selectedAnswer === "C" ? 5 : (isSpectator ? 3 : 4)
                 
                 // Visual effects
                 scale: mouseAreaC.containsMouse && mouseAreaC.enabled ? 1.05 : 1.0
-                opacity: (!mouseAreaC.enabled && !showResult) ? 0.6 : 1.0
+                opacity: (!mouseAreaC.enabled && !showResult) ? 0.6 : (isSpectator ? 0.85 : 1.0)
                 
                 Behavior on scale {
                     NumberAnimation { duration: 100 }
@@ -737,7 +786,7 @@ Page {
                 MouseArea {
                     id: mouseAreaC
                     anchors.fill: parent
-                    enabled: !answered && !showResult && currentQuestion !== ""
+                    enabled: !isSpectator && !answered && !showResult && currentQuestion !== ""
                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     hoverEnabled: true
                     onClicked: submitAnswer("C")
@@ -762,12 +811,12 @@ Page {
                     }
                 }
                 
-                border.color: selectedAnswer === "D" ? "#FFD93D" : "white"
-                border.width: selectedAnswer === "D" ? 5 : 4
+                border.color: selectedAnswer === "D" ? "#FFD93D" : (isSpectator ? "#F59E0B" : "white")
+                border.width: selectedAnswer === "D" ? 5 : (isSpectator ? 3 : 4)
                 
                 // Visual effects
                 scale: mouseAreaD.containsMouse && mouseAreaD.enabled ? 1.05 : 1.0
-                opacity: (!mouseAreaD.enabled && !showResult) ? 0.6 : 1.0
+                opacity: (!mouseAreaD.enabled && !showResult) ? 0.6 : (isSpectator ? 0.85 : 1.0)
                 
                 Behavior on scale {
                     NumberAnimation { duration: 100 }
@@ -817,7 +866,7 @@ Page {
                 MouseArea {
                     id: mouseAreaD
                     anchors.fill: parent
-                    enabled: !answered && !showResult && currentQuestion !== ""
+                    enabled: !isSpectator && !answered && !showResult && currentQuestion !== ""
                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     hoverEnabled: true
                     onClicked: submitAnswer("D")

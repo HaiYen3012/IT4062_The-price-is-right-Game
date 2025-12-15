@@ -35,7 +35,8 @@ Page {
             for (var i = 0; i < json.length; i++) {
                 roomsList.model.append({
                     room_code: json[i].room_code,
-                    players: json[i].players
+                    players: json[i].players,
+                    status: json[i].status || "LOBBY"
                 });
             }
         } catch (e) {
@@ -77,11 +78,44 @@ Page {
             
             backend.joinRoomSuccess.connect(function() {
                 roomListPopup.close()
-                stackView.push("qrc:/qml/WaitingRoom.qml", { 
-                    roomCode: pendingRoomCode,
-                    isHost: false,
-                    backend: backend
-                })
+                
+                // Kiểm tra xem phòng đang ở trạng thái gì
+                try {
+                    var roomInfoJson = backend.getRoomInfo();
+                    if (roomInfoJson && roomInfoJson !== "") {
+                        var roomInfo = JSON.parse(roomInfoJson);
+                        
+                        // Nếu phòng đang PLAYING -> vào màn hình game (spectator mode)
+                        if (roomInfo.status === "PLAYING") {
+                            console.log("Joining PLAYING room as spectator, navigating to Round1Room...");
+                            stackView.push("qrc:/qml/Round1Room.qml", { 
+                                backend: backend,
+                                isSpectator: true
+                            });
+                        } else {
+                            // Phòng LOBBY -> vào WaitingRoom bình thường
+                            stackView.push("qrc:/qml/WaitingRoom.qml", { 
+                                roomCode: pendingRoomCode,
+                                isHost: false,
+                                backend: backend
+                            });
+                        }
+                    } else {
+                        // Fallback nếu không lấy được room info
+                        stackView.push("qrc:/qml/WaitingRoom.qml", { 
+                            roomCode: pendingRoomCode,
+                            isHost: false,
+                            backend: backend
+                        });
+                    }
+                } catch (e) {
+                    console.error("Error checking room status:", e);
+                    stackView.push("qrc:/qml/WaitingRoom.qml", { 
+                        roomCode: pendingRoomCode,
+                        isHost: false,
+                        backend: backend
+                    });
+                }
             })
             
             backend.joinRoomFail.connect(function() {
@@ -340,7 +374,8 @@ Page {
                     width: ListView.view.width
                     height: 86
                     radius: 16
-                    color: "#B0BEC5"
+                    // Màu khác nhau dựa trên status: PLAYING = xanh dương, LOBBY = xám
+                    color: status === "PLAYING" ? "#4A90E2" : "#B0BEC5"
 
                     RowLayout {
                         anchors.fill: parent
@@ -352,14 +387,39 @@ Page {
                             radius: 12
                             color: "white"
                             border.width: 5
-                            border.color: "#FFB300"
-                            Image { anchors.centerIn: parent; source: "qrc:/ui/trophy.png"; width: 40; height: 40 }
+                            border.color: status === "PLAYING" ? "#FF5722" : "#FFB300"
+                            Layout.alignment: Qt.AlignVCenter
+                            Image { 
+                                anchors.centerIn: parent
+                                source: status === "PLAYING" ? "qrc:/ui/pic.png" : "qrc:/ui/trophy.png"
+                                width: 40; height: 40 
+                            }
                         }
 
                         Column {
                             spacing: 6
+                            Layout.alignment: Qt.AlignVCenter
                             Text { text: room_code; color: "white"; font.pixelSize: 22; font.bold: true }
-                            Text { text: players; color: "#E8F5E9"; font.pixelSize: 18 }
+                            Row {
+                                spacing: 10
+                                Text { text: players; color: "#E8F5E9"; font.pixelSize: 18 }
+                                // Badge hiển thị trạng thái
+                                Rectangle {
+                                    width: statusText.width + 16
+                                    height: 24
+                                    radius: 12
+                                    color: status === "PLAYING" ? "#FF5722" : "#4CAF50"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Text {
+                                        id: statusText
+                                        anchors.centerIn: parent
+                                        text: status === "PLAYING" ? "PLAYING" : "WAITING"
+                                        color: "white"
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                    }
+                                }
+                            }
                         }
 
                         Item { Layout.fillWidth: true }
@@ -367,10 +427,17 @@ Page {
                         Rectangle {
                             width: 100; height: 50
                             radius: 25
-                            color: "#FFCA28"
+                            color: status === "PLAYING" ? "#9C27B0" : "#FFCA28"
                             border.width: 4
-                            border.color: "#FFB300"
-                            Text { anchors.centerIn: parent; text: "JOIN"; color: "#212121"; font.pixelSize: 20; font.bold: true }
+                            border.color: status === "PLAYING" ? "#7B1FA2" : "#FFB300"
+                            Layout.alignment: Qt.AlignVCenter
+                            Text { 
+                                anchors.centerIn: parent
+                                text: status === "PLAYING" ? "WATCH" : "JOIN"
+                                color: status === "PLAYING" ? "white" : "#212121"
+                                font.pixelSize: 20
+                                font.bold: true 
+                            }
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
@@ -400,7 +467,8 @@ Page {
                                 for (var i = 0; i < json.length; i++) {
                                     roomsList.model.append({
                                         room_code: json[i].room_code,
-                                        players: json[i].players
+                                        players: json[i].players,
+                                        status: json[i].status || "LOBBY"
                                     })
                                 }
                             }

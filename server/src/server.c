@@ -17,6 +17,7 @@ Client *new_client()
     new->async_conn_fd = -1;
     new->room_id = 0;
     new->is_ready = 0;
+    new->is_spectator = 0;
     new->next = NULL;
     return new;
 }
@@ -375,12 +376,15 @@ void *handle_client(void *arg)
                     printf("[%d] Client requested room list\n", conn_fd);
                     pthread_mutex_lock(&mutex);
                     char q[512];
-                    // Chỉ hiển thị phòng LOBBY và có ít nhất 1 người trong phòng
-                    sprintf(q, "SELECT room_id, room_code, max_players, "
-                               "(SELECT COUNT(*) FROM room_members rm WHERE rm.room_id = r.room_id AND rm.left_at IS NULL) AS current_players "
+                    // Hiển thị:
+                    // - Phòng LOBBY chưa đủ người (có thể join chơi)
+                    // - Phòng PLAYING (có thể vào xem)
+                    sprintf(q, "SELECT r.room_id, r.room_code, r.max_players, r.status, "
+                               "(SELECT COUNT(*) FROM room_members rm WHERE rm.room_id = r.room_id AND rm.left_at IS NULL AND rm.role = 'PLAYER') AS current_players "
                                "FROM rooms r "
-                               "WHERE r.status = 'LOBBY' "
-                               "HAVING current_players > 0");
+                               "WHERE (r.status = 'LOBBY' OR r.status = 'PLAYING') "
+                               "HAVING (r.status = 'LOBBY' AND current_players > 0 AND current_players < r.max_players) "
+                               "   OR (r.status = 'PLAYING')");
                     if (mysql_query(g_db_conn, q)) {
                         fprintf(stderr, "MySQL query error: %s\n", mysql_error(g_db_conn));
                         msg.type = GET_ROOMS_RESULT;
@@ -398,8 +402,10 @@ void *handle_client(void *arg)
                             const char *room_id = row[0] ? row[0] : "0";
                             const char *room_code = row[1] ? row[1] : "";
                             const char *max_p = row[2] ? row[2] : "0";
-                            const char *cur_p = row[3] ? row[3] : "0";
-                            snprintf(entry, sizeof(entry), "{\"room_id\":%s,\"room_code\":\"%s\",\"players\":\"%s/%s\"}", room_id, room_code, cur_p, max_p);
+                            const char *status = row[3] ? row[3] : "LOBBY";
+                            const char *cur_p = row[4] ? row[4] : "0";
+                            snprintf(entry, sizeof(entry), "{\"room_id\":%s,\"room_code\":\"%s\",\"players\":\"%s/%s\",\"status\":\"%s\"}", 
+                                     room_id, room_code, cur_p, max_p, status);
                             strcat(json, entry);
                         }
                         strcat(json, "]");
@@ -464,6 +470,18 @@ void *handle_client(void *arg)
                     strcpy(room_code, msg.value);
                     result = handle_join_room(cli, room_code);
                     msg.type = result;
+                    
+                    // Nếu join thành công, gửi kèm thông tin spectator status
+                    if (result == JOIN_ROOM_SUCCESS) {
+                        // Format: "is_spectator" (0 hoặc 1)
+                        sprintf(msg.value, "%d", cli->is_spectator);
+                        
+                        // Nếu là spectator join vào phòng đang chơi, gửi trạng thái game hiện tại
+                        if (cli->is_spectator) {
+                            send_current_game_state(cli, cli->room_id);
+                        }
+                    }
+                    
                     send(conn_fd, &msg, sizeof(Message), 0);
                     if (result == JOIN_ROOM_SUCCESS) {
                         broadcast_room_state(cli->room_id);
@@ -565,9 +583,9 @@ void *handle_client(void *arg)
                         send(conn_fd, &msg, sizeof(Message), 0);
                     } else {
                         char q[1024];
-                        // Get room info with members
+                        // Get room info with members and status
                         sprintf(q, 
-                            "SELECT r.room_code, r.host_user_id, r.max_players, "
+                            "SELECT r.room_code, r.host_user_id, r.max_players, r.status, "
                             "(SELECT GROUP_CONCAT(u.username ORDER BY rm.joined_at SEPARATOR '|') "
                             " FROM room_members rm JOIN users u ON rm.user_id = u.user_id "
                             " WHERE rm.room_id = r.room_id AND rm.left_at IS NULL) AS members, "
@@ -587,12 +605,13 @@ void *handle_client(void *arg)
                                 char json[BUFF_SIZE];
                                 const char *room_code = row[0] ? row[0] : "";
                                 const char *max_p = row[2] ? row[2] : "4";
-                                const char *members = row[3] ? row[3] : "";
-                                const char *host_name = row[4] ? row[4] : "";
+                                const char *status = row[3] ? row[3] : "LOBBY";
+                                const char *members = row[4] ? row[4] : "";
+                                const char *host_name = row[5] ? row[5] : "";
                                 
                                 snprintf(json, sizeof(json), 
-                                    "{\"room_code\":\"%s\",\"max_players\":%s,\"members\":\"%s\",\"host_name\":\"%s\"}", 
-                                    room_code, max_p, members, host_name);
+                                    "{\"room_code\":\"%s\",\"max_players\":%s,\"status\":\"%s\",\"members\":\"%s\",\"host_name\":\"%s\"}", 
+                                    room_code, max_p, status, members, host_name);
                                 
                                 msg.type = GET_ROOM_INFO_RESULT;
                                 strncpy(msg.value, json, sizeof(msg.value)-1);
@@ -876,6 +895,7 @@ int handle_join_room(Client *cli, char room_code[BUFF_SIZE])
     MYSQL_ROW row;
     char query[512];
     int result;
+    int join_as_spectator = 0;
     
     printf("[%d] Join room: %s by %s\n", cli->conn_fd, room_code, cli->login_account);
     
@@ -887,8 +907,8 @@ int handle_join_room(Client *cli, char room_code[BUFF_SIZE])
         return JOIN_ROOM_FAIL;
     }
     
-    // Tìm room
-    sprintf(query, "SELECT room_id, max_players FROM rooms WHERE room_code = '%s' AND status = 'LOBBY'", room_code);
+    // Tìm room - cho phép join cả phòng LOBBY và PLAYING
+    sprintf(query, "SELECT room_id, max_players, status FROM rooms WHERE room_code = '%s' AND status IN ('LOBBY', 'PLAYING')", room_code);
     if (mysql_query(g_db_conn, query)) {
         fprintf(stderr, "MySQL query error: %s\n", mysql_error(g_db_conn));
         pthread_mutex_unlock(&mutex);
@@ -899,7 +919,7 @@ int handle_join_room(Client *cli, char room_code[BUFF_SIZE])
     row = mysql_fetch_row(res);
     
     if (row == NULL) {
-        // Room không tồn tại hoặc không ở trạng thái LOBBY
+        // Room không tồn tại hoặc không ở trạng thái LOBBY/PLAYING
         mysql_free_result(res);
         pthread_mutex_unlock(&mutex);
         return JOIN_ROOM_FAIL;
@@ -907,10 +927,11 @@ int handle_join_room(Client *cli, char room_code[BUFF_SIZE])
     
     int room_id = atoi(row[0]);
     int max_players = atoi(row[1]);
+    char *room_status = row[2];
     mysql_free_result(res);
     
-    // Kiểm tra số người trong phòng
-    sprintf(query, "SELECT COUNT(*) FROM room_members WHERE room_id = %d AND left_at IS NULL", room_id);
+    // Đếm số PLAYER hiện tại (không tính SPECTATOR)
+    sprintf(query, "SELECT COUNT(*) FROM room_members WHERE room_id = %d AND left_at IS NULL AND role = 'PLAYER'", room_id);
     if (mysql_query(g_db_conn, query)) {
         pthread_mutex_unlock(&mutex);
         return JOIN_ROOM_FAIL;
@@ -920,10 +941,16 @@ int handle_join_room(Client *cli, char room_code[BUFF_SIZE])
     int current_players = atoi(row[0]);
     mysql_free_result(res);
     
-    if (current_players >= max_players) {
+    // Xác định join như player hay spectator
+    if (strcmp(room_status, "PLAYING") == 0) {
+        // Phòng đang chơi -> bắt buộc là spectator (khán giả chỉ xem)
+        join_as_spectator = 1;
+    } else if (current_players >= max_players) {
+        // Phòng LOBBY nhưng đã đủ player -> KHÔNG CHO JOIN
         pthread_mutex_unlock(&mutex);
         return ROOM_FULL;
     }
+    // Nếu phòng LOBBY và chưa đủ người -> join như PLAYER (join_as_spectator = 0)
     
     // Lấy user_id
     sprintf(query, "SELECT user_id FROM users WHERE username = '%s'", cli->login_account);
@@ -942,7 +969,7 @@ int handle_join_room(Client *cli, char room_code[BUFF_SIZE])
     mysql_free_result(res);
     
     // Kiểm tra xem user đã có record trong room_members chưa
-    sprintf(query, "SELECT left_at FROM room_members WHERE room_id = %d AND user_id = %d", 
+    sprintf(query, "SELECT left_at, role FROM room_members WHERE room_id = %d AND user_id = %d", 
             room_id, user_id);
     if (mysql_query(g_db_conn, query)) {
         pthread_mutex_unlock(&mutex);
@@ -951,11 +978,13 @@ int handle_join_room(Client *cli, char room_code[BUFF_SIZE])
     res = mysql_store_result(g_db_conn);
     row = mysql_fetch_row(res);
     
+    char *role = join_as_spectator ? "SPECTATOR" : "PLAYER";
+    
     if (row != NULL) {
         // User đã có record, UPDATE để rejoin
         mysql_free_result(res);
-        sprintf(query, "UPDATE room_members SET left_at = NULL, joined_at = NOW() WHERE room_id = %d AND user_id = %d", 
-                room_id, user_id);
+        sprintf(query, "UPDATE room_members SET left_at = NULL, joined_at = NOW(), role = '%s' WHERE room_id = %d AND user_id = %d", 
+                role, room_id, user_id);
         if (mysql_query(g_db_conn, query)) {
             fprintf(stderr, "MySQL update error: %s\n", mysql_error(g_db_conn));
             pthread_mutex_unlock(&mutex);
@@ -964,8 +993,8 @@ int handle_join_room(Client *cli, char room_code[BUFF_SIZE])
     } else {
         // User chưa có record, INSERT mới
         mysql_free_result(res);
-        sprintf(query, "INSERT INTO room_members (room_id, user_id, role) VALUES (%d, %d, 'PLAYER')", 
-                room_id, user_id);
+        sprintf(query, "INSERT INTO room_members (room_id, user_id, role) VALUES (%d, %d, '%s')", 
+                room_id, user_id, role);
         if (mysql_query(g_db_conn, query)) {
             fprintf(stderr, "MySQL insert error: %s\n", mysql_error(g_db_conn));
             pthread_mutex_unlock(&mutex);
@@ -974,12 +1003,17 @@ int handle_join_room(Client *cli, char room_code[BUFF_SIZE])
     }
     
     cli->room_id = room_id;
-    cli->is_ready = 0;
+    cli->is_spectator = join_as_spectator;
+    cli->is_ready = join_as_spectator ? 0 : 0;  // Spectator không có ready state
     result = JOIN_ROOM_SUCCESS;
     
     pthread_mutex_unlock(&mutex);
     
-    printf("[%d] Joined room: %s (id=%d)\n", cli->conn_fd, room_code, room_id);
+    if (join_as_spectator) {
+        printf("[%d] Joined room as SPECTATOR: %s (id=%d)\n", cli->conn_fd, room_code, room_id);
+    } else {
+        printf("[%d] Joined room as PLAYER: %s (id=%d)\n", cli->conn_fd, room_code, room_id);
+    }
     
     return result;
 }
@@ -1030,7 +1064,8 @@ int handle_leave_room(Client *cli)
             mysql_free_result(res);
             
             // Kiểm tra còn members nào trong phòng không (không tính host đang rời)
-            sprintf(query, "SELECT user_id FROM room_members WHERE room_id = %d AND user_id != %d AND left_at IS NULL ORDER BY joined_at LIMIT 1", 
+            // Ưu tiên PLAYER, nếu không có thì lấy SPECTATOR
+            sprintf(query, "SELECT user_id FROM room_members WHERE room_id = %d AND user_id != %d AND left_at IS NULL ORDER BY CASE WHEN role = 'PLAYER' THEN 0 ELSE 1 END, joined_at LIMIT 1", 
                     room_id, user_id);
             if (mysql_query(g_db_conn, query) == 0) {
                 res = mysql_store_result(g_db_conn);
@@ -1076,6 +1111,7 @@ int handle_leave_room(Client *cli)
     
     cli->room_id = 0;
     cli->is_ready = 0;
+    cli->is_spectator = 0;
     
     pthread_mutex_unlock(&mutex);
     
@@ -1233,6 +1269,12 @@ int handle_ready_toggle(Client *cli)
         return READY_UPDATE;
     }
     
+    // Spectators cannot toggle ready status
+    if (cli->is_spectator) {
+        pthread_mutex_unlock(&mutex);
+        return READY_UPDATE;
+    }
+    
     // Kiểm tra xem user có phải host không (host luôn ready)
     sprintf(query, "SELECT user_id FROM users WHERE username = '%s'", cli->login_account);
     if (mysql_query(g_db_conn, query)) {
@@ -1347,12 +1389,13 @@ int handle_kick_user(Client *cli, char target_username[BUFF_SIZE])
             cli->room_id, target_user_id);
     mysql_query(g_db_conn, query);
     
-    // Tìm target client và update room_id, is_ready
+    // Tìm target client và update room_id, is_ready, is_spectator
     Client *target_cli = head_client;
     while (target_cli != NULL) {
         if (strcmp(target_cli->login_account, target_username) == 0) {
             target_cli->room_id = 0;
             target_cli->is_ready = 0;
+            target_cli->is_spectator = 0;
             
             // Gửi thông báo kick đến target qua async socket
             if (target_cli->async_conn_fd >= 0) {
@@ -1421,8 +1464,8 @@ int handle_start_game(Client *cli)
     }
     mysql_free_result(res);
     
-    // Kiểm tra số người chơi (2-4)
-    sprintf(query, "SELECT COUNT(*) FROM room_members WHERE room_id = %d AND left_at IS NULL", cli->room_id);
+    // Kiểm tra số người chơi (2-4) - chỉ đếm PLAYER, không đếm SPECTATOR
+    sprintf(query, "SELECT COUNT(*) FROM room_members WHERE room_id = %d AND left_at IS NULL AND role = 'PLAYER'", cli->room_id);
     if (mysql_query(g_db_conn, query)) {
         pthread_mutex_unlock(&mutex);
         return START_GAME_FAIL;
@@ -1506,9 +1549,9 @@ void broadcast_room_state(int room_id)
     Message msg;
     msg.type = UPDATE_ROOM_STATE;
     
-    // Lấy danh sách members trong phòng với ready state
+    // Lấy danh sách members trong phòng với ready state và role
     char query[512];
-    sprintf(query, "SELECT u.username FROM room_members rm JOIN users u ON rm.user_id = u.user_id WHERE rm.room_id = %d AND rm.left_at IS NULL ORDER BY rm.joined_at", room_id);
+    sprintf(query, "SELECT u.username, rm.role FROM room_members rm JOIN users u ON rm.user_id = u.user_id WHERE rm.room_id = %d AND rm.left_at IS NULL ORDER BY rm.joined_at", room_id);
     
     if (mysql_query(g_db_conn, query) == 0) {
         MYSQL_RES *res = mysql_store_result(g_db_conn);
@@ -1518,6 +1561,8 @@ void broadcast_room_state(int room_id)
         
         while ((row = mysql_fetch_row(res)) != NULL) {
             char *username = row[0];
+            char *role = row[1];
+            int is_spectator = (strcmp(role, "SPECTATOR") == 0) ? 1 : 0;
             
             // Tìm client tương ứng để lấy ready state
             int is_ready = 0;
@@ -1533,9 +1578,10 @@ void broadcast_room_state(int room_id)
             if (!first) strcat(json, ",");
             else first = 0;
             
-            // Format: {"username":"duyen","is_ready":true}
+            // Format: {"username":"duyen","is_ready":true,"is_spectator":false}
             char obj[256];
-            sprintf(obj, "{\"username\":\"%s\",\"is_ready\":%s}", username, is_ready ? "true" : "false");
+            sprintf(obj, "{\"username\":\"%s\",\"is_ready\":%s,\"is_spectator\":%s}", 
+                    username, is_ready ? "true" : "false", is_spectator ? "true" : "false");
             strcat(json, obj);
         }
         strcat(json, "]");
@@ -1605,6 +1651,66 @@ void send_invite_notification(int to_user_id, int from_user_id, int room_id, int
         } else {
             mysql_free_result(res);
         }
+    }
+    
+    pthread_mutex_unlock(&mutex);
+}
+
+// Send current game state to spectator who just joined
+void send_current_game_state(Client *cli, int room_id)
+{
+    pthread_mutex_lock(&mutex);
+    
+    char query[2048];
+    
+    // Lấy round hiện tại đang chơi (chưa ended_at)
+    sprintf(query, 
+        "SELECT r.round_id, r.round_type, r.question_id, r.time_limit_sec, r.started_at, q.question_text, q.option_a, q.option_b, q.option_c, q.option_d "
+        "FROM matches m "
+        "JOIN rounds r ON r.match_id = m.match_id "
+        "LEFT JOIN questions q ON r.question_id = q.question_id "
+        "WHERE m.room_id = %d AND r.ended_at IS NULL "
+        "ORDER BY r.round_id DESC LIMIT 1", room_id);
+    
+    if (mysql_query(g_db_conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(g_db_conn);
+        MYSQL_ROW row = mysql_fetch_row(res);
+        
+        if (row != NULL) {
+            int round_id = atoi(row[0]);
+            char *round_type = row[1];
+            int time_limit = atoi(row[3]);
+            char *started_at_str = row[4];
+            
+            // Tính thời gian đã trôi qua
+            time_t now = time(NULL);
+            struct tm tm_started;
+            strptime(started_at_str, "%Y-%m-%d %H:%M:%S", &tm_started);
+            time_t started_at = mktime(&tm_started);
+            int elapsed = (int)difftime(now, started_at);
+            int remaining = time_limit - elapsed;
+            
+            if (remaining > 0 && strcmp(round_type, "ROUND1") == 0) {
+                // Đang ở ROUND1 - gửi câu hỏi
+                char *question = row[5];
+                char *opt_a = row[6];
+                char *opt_b = row[7];
+                char *opt_c = row[8];
+                char *opt_d = row[9];
+                
+                Message msg;
+                msg.type = QUESTION_START;
+                sprintf(msg.value, "%d|%s|%s|%s|%s|%s", round_id, question, opt_a, opt_b, opt_c, opt_d);
+                
+                int target_fd = (cli->async_conn_fd >= 0) ? cli->async_conn_fd : cli->conn_fd;
+                send(target_fd, &msg, sizeof(Message), 0);
+                printf("[%d] Sent current QUESTION_START (round %d) to spectator %s\n", 
+                       cli->conn_fd, round_id, cli->login_account);
+            }
+            // TODO: Xử lý ROUND2 nếu cần
+        }
+        
+        mysql_free_result(res);
     }
     
     pthread_mutex_unlock(&mutex);
@@ -1835,6 +1941,12 @@ int handle_answer_submit(Client *cli, char answer[])
 {
     pthread_mutex_lock(&mutex);
     
+    // Spectators cannot submit answers
+    if (cli->is_spectator) {
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
+    
     // Parse: round_id|answer_choice (A/B/C/D)
     int round_id;
     char answer_choice[10];
@@ -1993,7 +2105,7 @@ void broadcast_question_result(int room_id, int round_id)
         "JOIN rounds r ON r.round_id = %d "
         "JOIN matches m ON r.match_id = m.match_id AND m.room_id = rm.room_id "
         "LEFT JOIN round_answers ra_current ON ra_current.round_id = r.round_id AND ra_current.user_id = u.user_id "
-        "WHERE rm.left_at IS NULL "
+        "WHERE rm.left_at IS NULL AND rm.role = 'PLAYER' "
         "ORDER BY total_score DESC", round_id);
     
     char result_json[BUFF_SIZE] = "{\"correct\":\"";
@@ -2056,7 +2168,7 @@ void broadcast_final_ranking(int room_id, int match_id)
         "JOIN matches m ON m.match_id = %d AND m.room_id = rm.room_id "
         "LEFT JOIN rounds r ON r.match_id = m.match_id "
         "LEFT JOIN round_answers ra ON ra.round_id = r.round_id AND ra.user_id = u.user_id "
-        "WHERE rm.left_at IS NULL "
+        "WHERE rm.left_at IS NULL AND rm.role = 'PLAYER' "
         "GROUP BY u.username "
         "ORDER BY total_score DESC", match_id);
     
@@ -2243,6 +2355,12 @@ void start_round2(int room_id, int match_id)
 int handle_price_submit(Client *cli, char price_data[])
 {
     pthread_mutex_lock(&mutex);
+    
+    // Spectators cannot submit prices
+    if (cli->is_spectator) {
+        pthread_mutex_unlock(&mutex);
+        return SYSTEM_ERROR;
+    }
     
     // Parse: round_id|guessed_price
     int round_id;
