@@ -117,6 +117,17 @@ typedef struct _message
   char value[BUFF_SIZE];
 } Message;
 
+// Room game state structure
+typedef struct _room_game_state
+{
+  int room_id;
+  int current_round_id;
+  char round_type[20];      // "ROUND1" or "ROUND2"
+  time_t round_start_time;  // Thời điểm bắt đầu round hiện tại
+  int time_limit_sec;       // Thời gian giới hạn của round
+  struct _room_game_state *next;
+} RoomGameState;
+
 // Client structure
 typedef struct _client
 {
@@ -132,6 +143,7 @@ typedef struct _client
 
 // Global variables
 extern Client *head_client;
+extern RoomGameState *head_room_state;
 extern pthread_mutex_t mutex;
 extern MYSQL *g_mysql_conn;
 
@@ -145,6 +157,11 @@ Client *new_client();
 void add_client(int conn_fd);
 void delete_client(int conn_fd);
 Client *find_client(int conn_fd);
+
+// Room game state management
+RoomGameState *get_room_state(int room_id);
+void update_room_state(int room_id, int round_id, const char *round_type, int time_limit_sec);
+void clear_room_state(int room_id);
 
 // Authentication functions
 int handle_signup(char username[BUFF_SIZE], char password[BUFF_SIZE]);
@@ -163,6 +180,7 @@ int handle_start_game(Client *cli);
 void broadcast_room_state(int room_id);
 void send_invite_notification(int to_user_id, int from_user_id, int room_id, int invitation_id);
 void send_current_game_state(Client *cli, int room_id);
+void *send_game_state_delayed(void *arg);
 
 // Round 1 game functions
 void *game_round_handler(void *arg);

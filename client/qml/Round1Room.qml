@@ -130,6 +130,11 @@ Page {
             backend.questionResult.connect(handleQuestionResult);
             backend.roundStart.connect(handleRoundStart);
             backend.gameEnd.connect(handleGameEnd);
+            
+            // Check if user is spectator
+            isSpectator = backend.isSpectator();
+            console.log("Round1Room initialized - isSpectator:", isSpectator);
+            
             console.log("Round1Room signals connected");
         } else {
             console.error("Backend is null!");
@@ -163,7 +168,7 @@ Page {
         });
     }
     
-    function handleQuestionStart(roundId, question, optA, optB, optC, optD) {
+    function handleQuestionStart(roundId, question, optA, optB, optC, optD, remainingTime) {
         console.log("=== Question received ===");
         console.log("Round:", roundId);
         console.log("Question:", question);
@@ -171,6 +176,7 @@ Page {
         console.log("Option B:", optB);
         console.log("Option C:", optC);
         console.log("Option D:", optD);
+        console.log("Remaining Time:", remainingTime);
         
         // Stop timer first
         countdownTimer.running = false;
@@ -198,10 +204,13 @@ Page {
         round1Room.optionB = optB;
         round1Room.optionC = optC;
         round1Room.optionD = optD;
-        timeRemaining = 15;  // Reset to 15s
+        
+        // Use remaining time from server (default 15 if not provided for backwards compatibility)
+        timeRemaining = (typeof remainingTime !== 'undefined') ? remainingTime : 15;
         
         console.log("After assignment - optionA:", round1Room.optionA);
         console.log("After assignment - optionC:", round1Room.optionC);
+        console.log("Starting timer with:", timeRemaining, "seconds");
         
         // Start countdown timer after everything is set
         countdownTimer.running = true;

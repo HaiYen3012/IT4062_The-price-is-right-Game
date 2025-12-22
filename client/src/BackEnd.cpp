@@ -32,11 +32,12 @@ static void message_callback_wrapper(Message msg)
             emit BackEnd::instance->kickedFromRoom(QString::fromUtf8(msg.value));
         }
         else if (msg.type == QUESTION_START) {
-            // Parse: round_id|question_text|option_a|option_b|option_c|option_d
+            // Parse: round_id|question_text|option_a|option_b|option_c|option_d[|remaining_time]
             qDebug() << "QUESTION_START received, raw data:" << msg.value;
             
             int round_id;
             char question[512], opt_a[256], opt_b[256], opt_c[256], opt_d[256];
+            int remaining_time = 15; // Default 15 seconds
             
             // Make a copy for parsing
             char buffer[2048];
@@ -79,13 +80,21 @@ static void message_callback_wrapper(Message msg)
                     qDebug() << "Option D:" << opt_d;
                 }
                 
+                // Optional: remaining time (for spectators joining mid-game)
+                token = strtok(NULL, "|");
+                if (token) {
+                    remaining_time = atoi(token);
+                    qDebug() << "Remaining Time:" << remaining_time;
+                }
+                
                 qDebug() << "Emitting questionStart signal...";
                 emit BackEnd::instance->questionStart(round_id,
                     QString::fromUtf8(question),
                     QString::fromUtf8(opt_a),
                     QString::fromUtf8(opt_b),
                     QString::fromUtf8(opt_c),
-                    QString::fromUtf8(opt_d));
+                    QString::fromUtf8(opt_d),
+                    remaining_time);
             } else {
                 qDebug() << "ERROR: Failed to parse QUESTION_START!";
             }
@@ -508,5 +517,10 @@ void BackEnd::submitPrice(int roundId, int guessedPrice)
     } else {
         qDebug() << "Failed to submit price!";
     }
+}
+
+bool BackEnd::isSpectator()
+{
+    return is_spectator() == 1;
 }
 

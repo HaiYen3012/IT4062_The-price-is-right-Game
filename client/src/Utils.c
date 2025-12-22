@@ -14,6 +14,9 @@ int listener_running = 0;
 char server_ip[256];
 int server_port;
 
+// Global state
+int g_is_spectator = 0;  // 0 = player, 1 = spectator
+
 int connect_to_server(char serverIP[], int serverPort)
 {
   // Save server info for async socket
@@ -259,6 +262,27 @@ int join_room(char room_code[])
     printf("Receive failed\n");
     return -1;
   }
+  
+  // If join successful, check if we're a spectator and room status
+  if (msg.type == JOIN_ROOM_SUCCESS) {
+    // msg.value format: "is_spectator|room_status"
+    char *token = strtok(msg.value, "|");
+    if (token) {
+      g_is_spectator = atoi(token);
+      if (g_is_spectator) {
+        printf("[CLIENT] Joined as SPECTATOR\n");
+      } else {
+        printf("[CLIENT] Joined as PLAYER\n");
+      }
+      
+      // Get room status
+      token = strtok(NULL, "|");
+      if (token) {
+        printf("[CLIENT] Room status: %s\n", token);
+      }
+    }
+  }
+  
   return msg.type;
 }
 
@@ -276,7 +300,16 @@ int leave_room()
     printf("Receive failed\n");
     return -1;
   }
+  
+  // Reset spectator flag when leaving room
+  g_is_spectator = 0;
+  
   return msg.type;
+}
+
+int is_spectator()
+{
+  return g_is_spectator;
 }
 
 int invite_user(char username[])

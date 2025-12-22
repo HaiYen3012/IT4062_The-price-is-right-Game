@@ -110,6 +110,9 @@ typedef struct _account
 // Callback for async messages
 typedef void (*MessageCallback)(Message msg);
 
+// Global state
+extern int g_is_spectator;  // 0 = player, 1 = spectator
+
 /*--------------------- Function Declaration -------------------------*/
 int connect_to_server(char ip[], int port);
 int disconnect_to_server();
@@ -131,6 +134,7 @@ int ready_toggle();
 int kick_user(char username[]);
 int start_game();
 int get_room_info(char buffer[], int bufsize);
+int is_spectator();  // Returns 1 if current user is spectator, 0 otherwise
 // Round 1 functions
 int submit_answer(int round_id, char answer_choice[]);
 // Round 2 functions
