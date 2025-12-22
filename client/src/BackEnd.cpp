@@ -1,5 +1,6 @@
 #include "../headers/BackEnd.h"
 #include <QDebug>
+extern "C" int sockfd;
 
 std::string BackEnd::server_ip = "";
 int BackEnd::server_port = 0;
@@ -23,7 +24,8 @@ static void message_callback_wrapper(Message msg)
             emit BackEnd::instance->updateRoomState(QString::fromUtf8(msg.value));
         }
         else if (msg.type == GAME_START_NOTIFY) {
-            qDebug() << "Game starting notification received!";
+            qDebug() << "Game starting notification received!" << msg.value;
+            emit BackEnd::instance->gameStarted(QString::fromUtf8(msg.value));
             emit BackEnd::instance->startGameSuccess();
         }
         else if (msg.type == KICK_NOTIFY) {
@@ -163,6 +165,11 @@ static void message_callback_wrapper(Message msg)
             }
         }
         else if (msg.type == ROUND_RESULT) {
+            emit BackEnd::instance->roundResult(QString::fromUtf8(msg.value));
+        }
+        else if (msg.type == ROUND_INFO) {
+            qDebug() << "Received ROUND_INFO (Turn Change):" << msg.value;
+            // Dùng chung signal roundResult để QML xử lý JSON
             emit BackEnd::instance->roundResult(QString::fromUtf8(msg.value));
         }
         else if (msg.type == GAME_END) {
@@ -480,6 +487,23 @@ void BackEnd::startGame()
             qDebug() << "Unknown error!";
             break;
     }
+}
+
+void BackEnd::sendRoundAnswer(QString answer)
+{
+    qDebug() << "Sending round answer/move:" << answer;
+    
+    Message msg;
+    msg.type = ROUND_ANSWER; // Đảm bảo Enum này khớp với Utils.h
+    strcpy(msg.data_type, "text");
+    
+    // Copy dữ liệu an toàn
+    QByteArray ba = answer.toUtf8();
+    strncpy(msg.value, ba.constData(), BUFF_SIZE - 1);
+    msg.value[BUFF_SIZE - 1] = '\0';
+    msg.length = strlen(msg.value);
+    
+    ::send(sockfd, &msg, sizeof(Message), 0);
 }
 
 QString BackEnd::getRoomInfo()

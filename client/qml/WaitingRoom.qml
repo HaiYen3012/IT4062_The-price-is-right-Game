@@ -158,11 +158,11 @@ Page {
             })
             
             backend.startGameSuccess.connect(function() {
-                console.log("=== GAME STARTED SIGNAL RECEIVED ===")
-                console.log("Current user:", backend.user_name)
-                console.log("Navigating to Round1Room...")
+                console.log("=== GAME STARTED SIGNAL RECEIVED (WAITING ROOM) ===")
+                //console.log("Current user:", backend.user_name)
+                //console.log("Navigating to Round1Room...")
                 // Navigate to Round 1 game screen
-                stackView.push("qrc:/qml/Round1Room.qml", { backend: backend })
+                //stackView.push("qrc:/qml/Round1Room.qml", { backend: backend })
             })
             
             backend.startGameFail.connect(function() {
