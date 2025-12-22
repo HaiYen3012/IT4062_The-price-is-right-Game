@@ -44,7 +44,18 @@ Page {
         running: false
         onTriggered: {
             console.log("Round3: Result display timeout - pushing to RankingPage");
-            console.log("Final rankings to push:", JSON.stringify(finalRankings));
+            
+            // Safe stringify với try-catch
+            if (finalRankings) {
+                try {
+                    console.log("Final rankings to push:", JSON.stringify(finalRankings));
+                } catch (e) {
+                    console.log("Final rankings to push: [unable to stringify]");
+                }
+            } else {
+                console.log("Final rankings to push: null");
+            }
+            
             // Close popup before navigating away so it does not linger
             if (round3ResultPopup.visible) {
                 round3ResultPopup.close();
@@ -72,6 +83,7 @@ Page {
 
     Connections {
         target: backend
+        enabled: room3.StackView.status === StackView.Active
         
         function onRoundResult(resultJson) {
             try {
@@ -252,55 +264,135 @@ Page {
         }
     }
 
-    // Left Player Box
+    // Left Player Box - Current User
     Rectangle {
         id: leftPlayerBox
         x: 20; y: headerBar.height + 20
-        width: 160; height: 200; radius: 12; color: "#FFDCC5"; z: 10
+        width: 160; height: 220; radius: 12; color: "#FFDCC5"; z: 10
+        
+        property int myIndex: {
+            for (var i = 0; i < playersModel.count; i++) {
+                if (playersModel.get(i).name === myUserName) return i
+            }
+            return -1
+        }
+        
         Column { 
             anchors.fill: parent; anchors.margins: 12; spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
-            Rectangle { 
-                width: 100; height: 100; radius: 50; color: "#ffffff"; border.width: 2; border.color: "#d6eaf2"; anchors.horizontalCenter: parent.horizontalCenter
-                Image { anchors.centerIn: parent; source: "qrc:/ui/pic.png"; width: 80; height: 80; fillMode: Image.PreserveAspectFit }
-            }
-            Text { 
-                text: playersModel.count > 0 ? playersModel.get(0).name : "..."
+            
+            Text {
+                text: "YOU"
+                font.pixelSize: 14
                 font.bold: true
-                color: (playersModel.count > 0 && playersModel.get(0).name === myUserName) ? "#D32F2F" : (currentPlayerIndex === 0 ? "#0B5E8A" : "#222")
+                color: "#D32F2F"
                 anchors.horizontalCenter: parent.horizontalCenter
             }
-            Text { 
-                text: playersModel.count > 0 ? playersModel.get(0).score + " pts" : "0 pts"
-                color: "#666"; font.pointSize: 12; font.bold: true; anchors.horizontalCenter: parent.horizontalCenter
+            
+            Rectangle { 
+                width: 100; height: 100; radius: 50; color: "#ffffff"; border.width: 3; border.color: currentPlayerIndex === leftPlayerBox.myIndex ? "#29B6F6" : "#d6eaf2"; anchors.horizontalCenter: parent.horizontalCenter
+                Image { anchors.centerIn: parent; source: "qrc:/ui/pic.png"; width: 80; height: 80; fillMode: Image.PreserveAspectFit }
             }
-            Rectangle { visible: currentPlayerIndex === 0; width: 14; height: 14; radius: 7; color: "#29B6F6"; anchors.horizontalCenter: parent.horizontalCenter }
+            
+            Text { 
+                text: leftPlayerBox.myIndex >= 0 ? playersModel.get(leftPlayerBox.myIndex).name : myUserName
+                font.bold: true
+                font.pixelSize: 14
+                color: "#D32F2F"
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            
+            Rectangle {
+                width: 120
+                height: 35
+                radius: 17
+                color: "#FF9800"
+                border.color: "#F57C00"
+                border.width: 2
+                anchors.horizontalCenter: parent.horizontalCenter
+                
+                Text { 
+                    anchors.centerIn: parent
+                    text: leftPlayerBox.myIndex >= 0 ? playersModel.get(leftPlayerBox.myIndex).score + " pts" : "0 pts"
+                    color: "white"
+                    font.pixelSize: 16
+                    font.bold: true
+                }
+            }
+            
+            Rectangle { 
+                visible: currentPlayerIndex === leftPlayerBox.myIndex
+                width: 16; height: 16; radius: 8; color: "#29B6F6"
+                anchors.horizontalCenter: parent.horizontalCenter
+                
+                SequentialAnimation on opacity {
+                    loops: Animation.Infinite
+                    running: currentPlayerIndex === leftPlayerBox.myIndex
+                    NumberAnimation { from: 1.0; to: 0.3; duration: 500 }
+                    NumberAnimation { from: 0.3; to: 1.0; duration: 500 }
+                }
+            }
         }
     }
 
-    // Right Players
+    // Right Players - Other players
     Column {
         id: rightPlayersBox
         x: parent.width - 20 - 160; y: headerBar.height + 20
         width: 160; spacing: 12; z: 10
+        
         Repeater {
-            model: Math.max(0, playersModel.count - 1)
+            model: playersModel.count
             delegate: Rectangle {
-                width: 160; height: 90; radius: 12; color: "#FFDCC5"
+                visible: playersModel.get(index).name !== myUserName
+                width: 160; height: 110; radius: 12; color: "#FFDCC5"
+                border.width: currentPlayerIndex === index ? 3 : 0
+                border.color: "#29B6F6"
+                
                 Column { 
-                    anchors.fill: parent; anchors.margins: 8; spacing: 6; anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.fill: parent; anchors.margins: 10; spacing: 6; anchors.horizontalCenter: parent.horizontalCenter
+                    
                     Rectangle { 
-                        width: 60; height: 60; radius: 30; color: "#ffffff"; border.width: 2; border.color: "#d6eaf2"; anchors.horizontalCenter: parent.horizontalCenter
-                        Image { anchors.centerIn: parent; source: "qrc:/ui/pic.png"; width: 48; height: 48; fillMode: Image.PreserveAspectFit }
-                    }
-                    Text { 
-                        text: playersModel.count > (index + 1) ? playersModel.get(index + 1).name : "..."
-                        font.bold: true; font.pixelSize: 12
-                        color: (playersModel.count > (index + 1) && playersModel.get(index+1).name === myUserName) ? "#D32F2F" : (currentPlayerIndex === (index + 1) ? "#0B5E8A" : "#222")
+                        width: 60; height: 60; radius: 30
+                        color: "#ffffff"
+                        border.width: 2
+                        border.color: currentPlayerIndex === index ? "#29B6F6" : "#d6eaf2"
                         anchors.horizontalCenter: parent.horizontalCenter
+                        
+                        Image { 
+                            anchors.centerIn: parent
+                            source: "qrc:/ui/pic.png"
+                            width: 48; height: 48
+                            fillMode: Image.PreserveAspectFit
+                        }
                     }
+                    
                     Text { 
-                        text: playersModel.count > (index + 1) ? playersModel.get(index + 1).score + " pts" : "0 pts"
-                        font.pixelSize: 11; color: "#666"; anchors.horizontalCenter: parent.horizontalCenter
+                        text: playersModel.get(index).name
+                        font.bold: true
+                        font.pixelSize: 13
+                        color: currentPlayerIndex === index ? "#0B5E8A" : "#222"
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        elide: Text.ElideRight
+                        width: parent.width - 10
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                    
+                    Rectangle {
+                        width: 100
+                        height: 28
+                        radius: 14
+                        color: "#FF9800"
+                        border.color: "#F57C00"
+                        border.width: 2
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        
+                        Text { 
+                            anchors.centerIn: parent
+                            text: playersModel.get(index).score + " pts"
+                            font.pixelSize: 13
+                            font.bold: true
+                            color: "white"
+                        }
                     }
                 }
             }
@@ -310,59 +402,87 @@ Page {
     // Center Area
     Rectangle {
         id: centerArea
-        anchors.left: leftPlayerBox.right; anchors.right: rightPlayersBox.left; anchors.top: headerBar.bottom; anchors.bottom: footerBar.top; anchors.margins: 20
-        color: "transparent"; z: 1
+        anchors.left: leftPlayerBox.right
+        anchors.right: rightPlayersBox.left
+        anchors.top: headerBar.bottom
+        anchors.bottom: footerBar.top
+        anchors.margins: 20
+        color: "transparent"
+        z: 1
+        
         Column {
-            anchors.centerIn: parent; spacing: 12; width: parent.width * 0.5
-            Text { text: "ROOM 03 - SPIN WHEEL"; font.pixelSize: 22; font.bold: true; color: "#043B56"; anchors.horizontalCenter: parent.horizontalCenter }
+            anchors.centerIn: parent
+            spacing: 12
+            width: parent.width * 0.5
+            
+            Text {
+                text: "ROOM 03 - SPIN WHEEL"
+                font.pixelSize: 22
+                font.bold: true
+                color: "#043B56"
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
 
             Rectangle {
                 id: spinnerViewport
-                width: 140; height: 220; color: "transparent"; clip: true; radius: 6; anchors.horizontalCenter: parent.horizontalCenter
+                width: 140
+                height: 220
+                color: "transparent"
+                clip: true
+                radius: 6
+                anchors.horizontalCenter: parent.horizontalCenter
+                
                 Item {
                     id: spinnerContent
                     width: spinnerViewport.width
                     height: numbers.length * itemHeight * (cycles + 2)
-                    x: 0; y: spinnerOffset
+                    x: 0
+                    y: spinnerOffset
+                    
                     Repeater {
-                        model: cycles + 2
-                        delegate: Column {
-                            Repeater {
-                                model: numbers.length
-                                delegate: Rectangle {
-                                    width: spinnerViewport.width; height: itemHeight
-                                    color: "#111"; border.width: 4; border.color: "#FFD300"; radius: 4; anchors.horizontalCenter: parent.horizontalCenter
-                                    Text { anchors.centerIn: parent; text: numbers[index]; font.pixelSize: 18; font.bold: true; color: "#ffffff" }
-                                }
+                        model: numbers.length * (cycles + 2)
+                        delegate: Rectangle {
+                            width: spinnerViewport.width
+                            height: itemHeight
+                            y: index * itemHeight
+                            color: index % numbers.length === spinTargetIndex ? "#FF5252" : "#E3F2FD"
+                            border.color: "#90CAF9"
+                            border.width: 1
+                            
+                            Text {
+                                anchors.centerIn: parent
+                                text: numbers[index % numbers.length]
+                                font.pixelSize: 18
+                                font.bold: true
+                                color: index % numbers.length === spinTargetIndex ? "white" : "#0B5E8A"
                             }
                         }
                     }
                 }
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    y: parent.height/2 - itemHeight/2
-                    width: parent.width
-                    height: itemHeight
-                    color: "#c62828"
-                    border.width: 3
-                    border.color: "#ffeb3b"
-                    radius: 4
-                    z: 2
-                    Text {
-                        anchors.centerIn: parent
-                        text: displayedNumber
-                        font.pixelSize: 22
-                        font.bold: true
-                        color: "#fffde7"
-                        style: Text.Outline
-                        styleColor: "#b8860b"
-                    }
+            }
+
+            Rectangle {
+                width: 140
+                height: 60
+                radius: 8
+                color: "#FF5252"
+                border.color: "#D32F2F"
+                border.width: 3
+                anchors.horizontalCenter: parent.horizontalCenter
+                
+                Text {
+                    anchors.centerIn: parent
+                    text: displayedNumber
+                    font.pixelSize: 28
+                    font.bold: true
+                    color: "white"
                 }
             }
 
-            // --- NÚT BẤM (ĐÃ FIX: XÓA enabled = false THỦ CÔNG) ---
-            Row { 
-                spacing: 12; anchors.horizontalCenter: parent.horizontalCenter
+            // --- NÚT BẤM (Với màu sắc và hover rõ ràng hơn) ---
+            Row {
+                spacing: 15
+                anchors.horizontalCenter: parent.horizontalCenter
                 
                 property bool isMyTurn: {
                     if (playersModel.count === 0) return false
@@ -370,43 +490,108 @@ Page {
                     return playersModel.get(currentPlayerIndex).name === myUserName
                 }
 
-                Button { 
+                Button {
                     id: spinBtn
-                    width: 100; height: 40
-                    text: spinning ? "..." : (currentTurnSpins === 0 ? "SPIN 1" : "SPIN 2")
-                    font.pixelSize: 14
+                    width: 120
+                    height: 50
+                    text: spinning ? "⏳ ..." : (currentTurnSpins === 0 ? "🎰 SPIN 1" : "🎰 SPIN 2")
                     
                     // Logic tự động: Chỉ cần khai báo ở đây, KHÔNG can thiệp thủ công
                     enabled: parent.isMyTurn && !spinning && backend !== null && currentTurnSpins < 2
+                    
+                    background: Rectangle {
+                        radius: 12
+                        color: {
+                            if (!parent.enabled) return "#9E9E9E"
+                            if (parent.hovered) return "#388E3C"
+                            return "#4CAF50"
+                        }
+                        border.color: parent.enabled ? "#2E7D32" : "#757575"
+                        border.width: 3
+                        
+                        // Shine effect
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.margins: 3
+                            radius: 9
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0) }
+                                GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.1) }
+                            }
+                        }
+                    }
+                    
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: 16
+                        font.bold: true
+                        color: parent.enabled ? "white" : "#E0E0E0"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    
+                    scale: hovered && enabled ? 1.05 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 150 } }
                     
                     onClicked: {
                         if (spinning) return
                         console.log("Sending SPIN request...")
                         backend.sendRoundAnswer("SPIN")
-                        
-                        // [QUAN TRỌNG] ĐÃ XÓA DÒNG: spinBtn.enabled = false
-                        // Lý do: Khi gửi lệnh xong, biến 'spinning' sẽ được set = true (trong hàm handleSpinResult),
-                        // lúc đó công thức 'enabled' bên trên sẽ tự động tắt nút này.
-                    } 
+                    }
                 }
 
-                Button { 
+                Button {
                     id: passBtn
-                    text: "PASS"; width: 100; height: 40; font.pixelSize: 14
+                    text: "⏭️ PASS"
+                    width: 120
+                    height: 50
                     
                     enabled: parent.isMyTurn && !spinning && backend !== null && currentTurnSpins >= 1
-                    opacity: enabled ? 1.0 : 0.5
                     
-                    onClicked: { 
+                    background: Rectangle {
+                        radius: 12
+                        color: {
+                            if (!parent.enabled) return "#9E9E9E"
+                            if (parent.hovered) return "#F57C00"
+                            return "#FF9800"
+                        }
+                        border.color: parent.enabled ? "#E65100" : "#757575"
+                        border.width: 3
+                        
+                        // Shine effect
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.margins: 3
+                            radius: 9
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0) }
+                                GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.1) }
+                            }
+                        }
+                    }
+                    
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: 16
+                        font.bold: true
+                        color: parent.enabled ? "white" : "#E0E0E0"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    
+                    scale: hovered && enabled ? 1.05 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 150 } }
+                    
+                    onClicked: {
                         console.log("Sending PASS request...")
                         backend.sendRoundAnswer("PASS")
-                        
-                        // [QUAN TRỌNG] ĐÃ XÓA CÁC DÒNG gán enabled = false
-                    } 
+                    }
                 }
             }
 
-            Text { 
+            Text {
                 id: infoText
                 text: {
                     if (playersModel.count > currentPlayerIndex) {
@@ -418,12 +603,19 @@ Page {
                 }
                 anchors.horizontalCenter: parent.horizontalCenter
                 color: (infoText.text.indexOf("BẠN") !== -1) ? "#D32F2F" : "#043B56"
-                font.pixelSize: 16; font.bold: true
+                font.pixelSize: 16
+                font.bold: true
             }
         }
     }
 
-    Rectangle { id: footerBar; height: 50; anchors.bottom: parent.bottom; width: parent.width; z: 10 }
+    Rectangle {
+        id: footerBar
+        height: 50
+        anchors.bottom: parent.bottom
+        width: parent.width
+        z: 10
+    }
     
     // Round 3 Result Popup
     Popup {
@@ -440,9 +632,23 @@ Page {
             console.log("Round3 popup closed");
             if (finalRankings && !finalRankingPushed) {
                 console.log("Pushing RankingPage after popup closed");
+                
+                // Tạo bản copy an toàn của finalRankings
+                var rankingsCopy = [];
+                try {
+                    if (Array.isArray(finalRankings)) {
+                        for (var i = 0; i < finalRankings.length; i++) {
+                            rankingsCopy.push(finalRankings[i]);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error copying finalRankings:", e);
+                    rankingsCopy = [];
+                }
+                
                 stackView.push("qrc:/qml/RankingPage.qml", {
                     backend: backend,
-                    rankings: finalRankings,
+                    rankings: rankingsCopy,
                     roundNumber: 3,
                     isFinalRanking: true
                 });
@@ -540,11 +746,39 @@ Page {
     
     Popup {
         id: eliminationPopup
-        property string popMessage: ""; x: (parent.width - 360)/2; y: (parent.height-200)/2; width: 360; height: 200; modal: true; focus: true
-        background: Rectangle { radius: 12; color: "#ffffff"; border.color: "#DD3333" }
-        Column { anchors.fill: parent; anchors.margins: 12; spacing: 12; anchors.horizontalCenter: parent.horizontalCenter
-            Text { text: eliminationPopup.popMessage; wrapMode: Text.WordWrap; font.pixelSize: 16; width: parent.width; horizontalAlignment: Text.AlignHCenter }
-            Button { text: "OK"; onClicked: eliminationPopup.close(); anchors.horizontalCenter: parent.horizontalCenter }
+        property string popMessage: ""
+        x: (parent.width - 360)/2
+        y: (parent.height-200)/2
+        width: 360
+        height: 200
+        modal: true
+        focus: true
+        
+        background: Rectangle {
+            radius: 12
+            color: "#ffffff"
+            border.color: "#DD3333"
+        }
+        
+        Column {
+            anchors.fill: parent
+            anchors.margins: 12
+            spacing: 12
+            anchors.horizontalCenter: parent.horizontalCenter
+            
+            Text {
+                text: eliminationPopup.popMessage
+                wrapMode: Text.WordWrap
+                font.pixelSize: 16
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+            }
+            
+            Button {
+                text: "OK"
+                onClicked: eliminationPopup.close()
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
         }
     }
 
@@ -571,6 +805,13 @@ Page {
         if (numbers.length > 0) {
             displayedNumber = numbers[0]
         }
+    }
+
+    Component.onDestruction: {
+        console.log("Room3 being destroyed - stopping all timers");
+        round3ResultTimer.stop();
+        shuffleTimer.stop();
+        spinning = false;
     }
 
     function setupDummyPlayers() {

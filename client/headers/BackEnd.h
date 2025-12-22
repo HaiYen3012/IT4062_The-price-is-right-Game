@@ -79,6 +79,9 @@ signals:
     void gameEnd(QString rankingData);
     void gameStarted(QString data);
 
+public slots:
+    void handleMessageFromThread(int msgType, QString msgValue);
+
 private:
     QString user_name;
 };

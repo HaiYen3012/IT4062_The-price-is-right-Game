@@ -21,6 +21,7 @@ Page {
     property bool showResult: false
     property var playerScores: []
     property bool round2Started: false  // Track xem round 2 đã bắt đầu hay chưa
+    property bool isNavigatingAway: false  // Flag để ngăn xử lý messages sau khi navigate
     
     // Nhận parameters từ navigation
     property int roundId: 0
@@ -114,6 +115,12 @@ Page {
     }
     
     function handleGameEnd(rankingData) {
+        // Guard: Nếu đang navigate away, bỏ qua
+        if (isNavigatingAway) {
+            console.log("Round2Room: Ignoring GAME_END because navigating away");
+            return;
+        }
+        
         console.log("=== GAME END received in Round2Room ===" );
         console.log("Ranking data:", rankingData);
         try {
@@ -170,14 +177,41 @@ Page {
             countdownTimer.running = true;
         } else {
             // Round 2 đã bắt đầu -> này là ROUND_START cho round tiếp theo (Round 3)
-            // -> Ranking đã được push rồi từ resultDisplayTimer
-            console.log("=== ROUND_START Round 3 received, Round 2 context ending ===");
+            console.log("=== ROUND_START Round 3 received - Navigating to Room3 ===");
+            console.log("Round 3 type:", roundType);
             countdownTimer.running = false;
-            // Không cần làm gì nữa, RankingPage đã được push từ resultDisplayTimer
+            resultDisplayTimer.running = false;
+            rankingDelayTimer.running = false;
+            
+            // Set flag để ngăn xử lý thêm messages
+            isNavigatingAway = true;
+            
+            // Disconnect signals trước khi navigate để tránh nhận messages cho Round 3
+            if (backend) {
+                try {
+                    backend.roundStart.disconnect(handleRoundStart);
+                    backend.roundResult.disconnect(handleRoundResult);
+                    backend.gameEnd.disconnect(handleGameEnd);
+                    console.log("Round2Room signals disconnected before navigating to Room3");
+                } catch (e) {
+                    console.log("Error disconnecting signals:", e);
+                }
+            }
+            
+            // Chuyển sang Room3
+            stackView.replace("qrc:/qml/Room3.qml", { 
+                backend: backend
+            });
         }
     }
     
     function handleRoundResult(resultData) {
+        // Guard: Nếu đang navigate away, bỏ qua tất cả messages
+        if (isNavigatingAway) {
+            console.log("Round2Room: Ignoring message because navigating away");
+            return;
+        }
+        
         try {
             var result = JSON.parse(resultData);
             
@@ -192,7 +226,15 @@ Page {
             showResult = true;
             countdownTimer.running = false;
             console.log("Round2Room - Kết quả hiển thị: giá thực:", actualPrice, "điểm người chơi:", playerScores.length);
-            console.log("Round2Room - playerScores data:", JSON.stringify(playerScores));
+            
+            // Chỉ stringify nếu playerScores hợp lệ
+            if (playerScores && playerScores.length > 0) {
+                try {
+                    console.log("Round2Room - playerScores data:", JSON.stringify(playerScores));
+                } catch (e) {
+                    console.log("Round2Room - Could not stringify playerScores:", e);
+                }
+            }
             
             // Start timer to show result for 3 seconds, then push to ranking
             resultDisplayTimer.running = true;
@@ -560,8 +602,8 @@ Page {
                     
                     RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 15
-                        spacing: 10
+                        anchors.margins: 10
+                        spacing: 5
                         
                         TextField {
                             id: priceInput
@@ -569,14 +611,16 @@ Page {
                             Layout.fillHeight: true
                             text: ""
                             placeholderText: "Enter price (VND)..."
-                            font.pixelSize: 32
+                            font.pixelSize: 28
                             font.bold: true
                             color: "#7C3AED"
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             enabled: !priceSubmitted && !showResult
-                            leftPadding: 10
-                            rightPadding: 10
+                            leftPadding: 5
+                            rightPadding: 5
+                            topPadding: 0
+                            bottomPadding: 0
                             
                             validator: IntValidator {
                                 bottom: 0
@@ -593,17 +637,18 @@ Page {
                                 }
                             }
                             
-                            background: Rectangle {
-                                color: "transparent"
-                                border.width: 0
-                            }
+                            background: Item {}
+                            
+                            // Placeholder text style
+                            placeholderTextColor: "#C4B5FD"
                         }
                         
                         Text {
                             text: "đ"
-                            font.pixelSize: 26
+                            font.pixelSize: 24
                             font.bold: true
                             color: "#7C3AED"
+                            verticalAlignment: Text.AlignVCenter
                         }
                     }
                 }
