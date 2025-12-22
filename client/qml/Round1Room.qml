@@ -205,8 +205,12 @@ Page {
         round1Room.optionC = optC;
         round1Room.optionD = optD;
         
-        // Use remaining time from server (default 15 if not provided for backwards compatibility)
-        timeRemaining = (typeof remainingTime !== 'undefined') ? remainingTime : 15;
+        // Use remaining time from server (default 15 if not provided or invalid)
+        if (remainingTime !== undefined && remainingTime > 0) {
+            timeRemaining = remainingTime;
+        } else {
+            timeRemaining = 15;
+        }
         
         console.log("After assignment - optionA:", round1Room.optionA);
         console.log("After assignment - optionC:", round1Room.optionC);
@@ -320,49 +324,6 @@ Page {
         }
     }
     
-    // Spectator Mode Badge
-    Rectangle {
-        visible: isSpectator
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.margins: 20
-        width: 180
-        height: 50
-        z: 999
-        
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: "#F59E0B" }
-            GradientStop { position: 1.0; color: "#D97706" }
-        }
-        
-        radius: 25
-        border.color: "#FCD34D"
-        border.width: 3
-        
-        RowLayout {
-            anchors.centerIn: parent
-            spacing: 8
-            
-            Text {
-                text: "👁"
-                font.pixelSize: 24
-            }
-            
-            Text {
-                text: "SPECTATOR"
-                font.pixelSize: 16
-                font.bold: true
-                color: "white"
-            }
-        }
-        
-        SequentialAnimation on opacity {
-            loops: Animation.Infinite
-            NumberAnimation { from: 1.0; to: 0.7; duration: 1000 }
-            NumberAnimation { from: 0.7; to: 1.0; duration: 1000 }
-        }
-    }
-    
     // Main layout
     ColumnLayout {
         anchors.fill: parent
@@ -376,23 +337,46 @@ Page {
             Layout.preferredHeight: 80
             spacing: 20
             
+            // Left: Spectator badge (auto shrink)
+            Rectangle {
+                visible: isSpectator
+                Layout.preferredWidth: 160
+                Layout.minimumWidth: 80
+                Layout.preferredHeight: 50
+                Layout.alignment: Qt.AlignVCenter
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: "#F59E0B" }
+                    GradientStop { position: 1.0; color: "#D97706" }
+                }
+                radius: 25
+                border.color: "#FCD34D"
+                border.width: 3
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 8
+                    Text { text: "👁"; font.pixelSize: 22 }
+                    Text { text: "SPECTATOR"; font.pixelSize: 15; font.bold: true; color: "white" }
+                }
+                SequentialAnimation on opacity {
+                    loops: Animation.Infinite
+                    NumberAnimation { from: 1.0; to: 0.7; duration: 1000 }
+                    NumberAnimation { from: 0.7; to: 1.0; duration: 1000 }
+                }
+            }
+            // Center: Logo (always fill width)
             Item { Layout.fillWidth: true }
-            
-            // The Price is Right Logo
             Rectangle {
                 Layout.preferredWidth: 400
+                Layout.minimumWidth: 200
                 Layout.preferredHeight: 80
+                Layout.alignment: Qt.AlignVCenter
                 radius: 15
-                
                 gradient: Gradient {
                     GradientStop { position: 0.0; color: "#FF6B6B" }
                     GradientStop { position: 1.0; color: "#EE5A6F" }
                 }
-                
                 border.color: "#FFD93D"
                 border.width: 4
-                
-                // Shine effect
                 Rectangle {
                     anchors.fill: parent
                     anchors.margins: 4
@@ -404,11 +388,9 @@ Page {
                         GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0) }
                     }
                 }
-                
                 ColumnLayout {
                     anchors.centerIn: parent
                     spacing: 2
-                    
                     Text {
                         text: "THE PRICE IS RIGHT"
                         font.pixelSize: 24
@@ -440,16 +422,16 @@ Page {
             
             Item { Layout.fillWidth: true }
             
-            // Timer Circle
+            // Timer Circle (auto shrink)
             Rectangle {
                 Layout.preferredWidth: 100
+                Layout.minimumWidth: 60
                 Layout.preferredHeight: 100
+                Layout.alignment: Qt.AlignVCenter
                 radius: 50
                 color: timeRemaining <= 5 ? "#FF4757" : "#6C5CE7"
                 border.color: "white"
                 border.width: 5
-                
-                // Shadow effect
                 layer.enabled: true
                 layer.effect: ShaderEffect {
                     fragmentShader: "
@@ -460,11 +442,9 @@ Page {
                         }
                     "
                 }
-                
                 ColumnLayout {
                     anchors.centerIn: parent
                     spacing: 0
-                    
                     Text {
                         text: timeRemaining
                         font.pixelSize: 48
@@ -473,7 +453,6 @@ Page {
                         Layout.alignment: Qt.AlignHCenter
                         font.family: "Arial Black"
                     }
-                    
                     Text {
                         text: "SEC"
                         font.pixelSize: 12
@@ -482,8 +461,6 @@ Page {
                         Layout.alignment: Qt.AlignHCenter
                     }
                 }
-                
-                // Urgent pulse when time is low
                 SequentialAnimation on scale {
                     loops: Animation.Infinite
                     running: timeRemaining <= 5

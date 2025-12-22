@@ -1851,8 +1851,8 @@ void *send_game_state_delayed(void *arg)
     
     SendStateArgs *args = (SendStateArgs *)arg;
     
-    // Đợi 2 giây để client chuyển màn hình
-    sleep(2);
+    // Đợi 1 giây để client chuyển màn hình (giảm từ 2s để khán giả có nhiều thời gian hơn)
+    sleep(1);
     
     // Gửi game state
     send_current_game_state(args->cli, args->room_id);
@@ -1998,9 +1998,6 @@ void start_round1(int room_id)
         int round_id = mysql_insert_id(g_db_conn);
         printf("Created Round 1 Question %d (round_id=%d) for match %d\n", question_num, round_id, match_id);
         
-        // Cập nhật trạng thái phòng
-        update_room_state(room_id, round_id, "ROUND1", 15);
-        
         // Prepare message to broadcast
         Message msg;
         msg.type = QUESTION_START;
@@ -2020,6 +2017,9 @@ void start_round1(int room_id)
             }
             tmp = tmp->next;
         }
+        
+        // Cập nhật trạng thái phòng NGAY SAU khi gửi message để thời gian chính xác
+        update_room_state(room_id, round_id, "ROUND1", 15);
         
         pthread_mutex_unlock(&mutex);
         
@@ -2425,9 +2425,6 @@ void start_round2(int room_id, int match_id)
     int round_id = mysql_insert_id(g_db_conn);
     printf("Created Round 2 (round_id=%d) for match %d\n", round_id, match_id);
     
-    // Cập nhật trạng thái phòng
-    update_room_state(room_id, round_id, "ROUND2", 20);
-    
     // Link product to round
     sprintf(query, 
         "INSERT INTO round_products (round_id, product_id, display_order) "
@@ -2455,6 +2452,9 @@ void start_round2(int room_id, int match_id)
         }
         tmp = tmp->next;
     }
+    
+    // Cập nhật trạng thái phòng NGAY SAU khi gửi message để thời gian chính xác
+    update_room_state(room_id, round_id, "ROUND2", 20);
     
     pthread_mutex_unlock(&mutex);
     
