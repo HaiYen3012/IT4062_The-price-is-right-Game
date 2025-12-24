@@ -35,14 +35,36 @@ static void message_callback_wrapper(Message* msg)
                               Q_ARG(QString, msgValue));
 }
 
-BackEnd::BackEnd(QObject *parent) : QObject(parent)
+BackEnd::BackEnd(QObject *parent) : QObject(parent), m_currentSeconds(0)
 {
-    instance = this;
-    set_message_callback(message_callback_wrapper);
+    // Chỉ set instance nếu chưa có instance nào
+    if (!instance) {
+        instance = this;
+        set_message_callback(message_callback_wrapper);
+        qDebug() << "BackEnd instance created and set as active";
+    } else {
+        qDebug() << "WARNING: Multiple BackEnd instances detected! This may cause duplicate notifications.";
+    }
+    
+    // Initialize global timer
+    m_globalTimer = new QTimer(this);
+    m_globalTimer->setInterval(1000);
+    connect(m_globalTimer, &QTimer::timeout, this, &BackEnd::onTimerTimeout);
 }
 
 BackEnd::~BackEnd()
 {
+    // Stop timer if running
+    if (m_globalTimer && m_globalTimer->isActive()) {
+        m_globalTimer->stop();
+    }
+    
+    // Chỉ clear instance và callback nếu đây là instance đang active
+    if (instance == this) {
+        instance = nullptr;
+        set_message_callback(nullptr);
+        qDebug() << "BackEnd instance destroyed and cleared";
+    }
     stop_message_listener();
 }
 
@@ -562,5 +584,41 @@ void BackEnd::handleMessageFromThread(int msgType, QString msgValue)
     }
     else if (msgType == GAME_END) {
         emit gameEnd(msgValue);
+    }
+}
+
+void BackEnd::startCountdown(int seconds)
+{
+    qDebug() << "Starting global countdown timer:" << seconds << "seconds";
+    
+    // Stop any existing timer first
+    if (m_globalTimer->isActive()) {
+        m_globalTimer->stop();
+        qDebug() << "Stopped previous timer";
+    }
+    
+    m_currentSeconds = seconds;
+    emit timerTick(m_currentSeconds);  // Emit initial value
+    m_globalTimer->start();
+}
+
+void BackEnd::stopCountdown()
+{
+    qDebug() << "Stopping global countdown timer";
+    if (m_globalTimer->isActive()) {
+        m_globalTimer->stop();
+    }
+    m_currentSeconds = 0;
+}
+
+void BackEnd::onTimerTimeout()
+{
+    if (m_currentSeconds > 0) {
+        m_currentSeconds--;
+        emit timerTick(m_currentSeconds);
+        qDebug() << "Timer tick:" << m_currentSeconds;
+    } else {
+        m_globalTimer->stop();
+        qDebug() << "Timer finished";
     }
 }

@@ -16,6 +16,10 @@ Page {
     property var backend: null
     property var roomMembers: []
     
+    // Invite button debounce
+    property var lastInvitedPlayer: ""
+    property int lastInviteTime: 0
+    
     // Player ready states
     property var playerReadyStates: [true, false, false, false] // Host always ready
     
@@ -388,7 +392,17 @@ Page {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
+                                    var currentTime = Date.now()
+                                    // Prevent double-click (debounce 1000ms)
+                                    if (lastInvitedPlayer === playerName && (currentTime - lastInviteTime) < 1000) {
+                                        console.log("Ignoring duplicate invite for:", playerName)
+                                        return
+                                    }
+                                    
                                     console.log("Invite player:", playerName)
+                                    lastInvitedPlayer = playerName
+                                    lastInviteTime = currentTime
+                                    
                                     if (backend) {
                                         backend.inviteUser(playerName)
                                     }

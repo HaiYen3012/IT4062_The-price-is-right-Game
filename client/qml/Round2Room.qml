@@ -88,30 +88,21 @@ Page {
             timeRemaining = timeLimit_;
             priceSubmitted = false;
             showResult = false;
-            countdownTimer.running = true;
+            if (backend) {
+                backend.startCountdown(timeLimit_);
+            }
         }
         
-        if (backend) {
-            backend.roundStart.connect(handleRoundStart);
-            backend.roundResult.connect(handleRoundResult);
-            backend.gameEnd.connect(handleGameEnd);
-            console.log("Round2Room signals connected");
-        } else {
+        if (!backend) {
             console.error("Backend is null!");
         }
     }
     
     Component.onDestruction: {
-        // Disconnect signals khi exit Round2Room để tránh bỏ qua dữ liệu từ round khác
+        // Stop timer when page is destroyed
         if (backend) {
-            try {
-                backend.roundStart.disconnect(handleRoundStart);
-                backend.roundResult.disconnect(handleRoundResult);
-                backend.gameEnd.disconnect(handleGameEnd);
-                console.log("Round2Room signals disconnected");
-            } catch (e) {
-                console.log("Error disconnecting signals:", e);
-            }
+            backend.stopCountdown();
+            console.log("Round2Room destroyed, timer stopped");
         }
     }
     
@@ -129,7 +120,9 @@ Page {
             console.log("Parsed ranking data, players count:", data.players ? data.players.length : 0);
             
             // Tắt timer
-            countdownTimer.running = false;
+            if (backend) {
+                backend.stopCountdown();
+            }
             
             // Replace (không push) sang RankingPage final với tổng điểm cả 3 vòng
             stackView.replace("qrc:/qml/RankingPage.qml", { 
@@ -155,7 +148,9 @@ Page {
             console.log("Threshold:", threshold, "% Time:", timeLimit_, "s");
             
             // Stop timer
-            countdownTimer.running = false;
+            if (backend) {
+                backend.stopCountdown();
+            }
             
             // Update Round 2 data
             round2Id = roundId;
@@ -175,12 +170,16 @@ Page {
             playerScores = [];
             
             // Start timer
-            countdownTimer.running = true;
+            if (backend) {
+                backend.startCountdown(timeLimit_);
+            }
         } else {
             // Round 2 đã bắt đầu -> này là ROUND_START cho round tiếp theo (Round 3)
             console.log("=== ROUND_START Round 3 received - Navigating to Room3 ===");
             console.log("Round 3 type:", roundType);
-            countdownTimer.running = false;
+            if (backend) {
+                backend.stopCountdown();
+            }
             resultDisplayTimer.running = false;
             rankingDelayTimer.running = false;
             
@@ -225,7 +224,9 @@ Page {
             actualPrice = result.actual_price;
             playerScores = result.players || [];
             showResult = true;
-            countdownTimer.running = false;
+            if (backend) {
+                backend.stopCountdown();
+            }
             console.log("Round2Room - Kết quả hiển thị: giá thực:", actualPrice, "điểm người chơi:", playerScores.length);
             
             // Chỉ stringify nếu playerScores hợp lệ
@@ -255,17 +256,25 @@ Page {
         }
     }
     
-    Timer {
-        id: countdownTimer
-        interval: 1000
-        running: false
-        repeat: true
-        onTriggered: {
-            if (timeRemaining > 0) {
-                timeRemaining--;
-            } else {
-                running = false;
-            }
+    // Use Connections instead of .connect() to prevent accumulation
+    Connections {
+        target: backend
+        enabled: round2Room.StackView.status === StackView.Active && !isNavigatingAway
+        
+        function onRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit_, imageUrl) {
+            handleRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit_, imageUrl);
+        }
+        
+        function onRoundResult(resultData) {
+            handleRoundResult(resultData);
+        }
+        
+        function onGameEnd(rankingData) {
+            handleGameEnd(rankingData);
+        }
+        
+        function onTimerTick(secondsRemaining) {
+            timeRemaining = secondsRemaining;
         }
     }
     

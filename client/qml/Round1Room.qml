@@ -124,27 +124,16 @@ Page {
     
     Component.onCompleted: {
         console.log("Round1Room loaded, backend:", backend);
-        if (backend) {
-            backend.questionStart.connect(handleQuestionStart);
-            backend.questionResult.connect(handleQuestionResult);
-            backend.gameEnd.connect(handleGameEnd);
-            console.log("Round1Room signals connected");
-        } else {
+        if (!backend) {
             console.error("Backend is null!");
         }
     }
     
     Component.onDestruction: {
-        // Disconnect signals khi exit để tránh bỏ qua dữ liệu từ round khác
+        // Stop timer when page is destroyed
         if (backend) {
-            try {
-                backend.questionStart.disconnect(handleQuestionStart);
-                backend.questionResult.disconnect(handleQuestionResult);
-                backend.gameEnd.disconnect(handleGameEnd);
-                console.log("Round1Room signals disconnected");
-            } catch (e) {
-                console.log("Error disconnecting signals:", e);
-            }
+            backend.stopCountdown();
+            console.log("Round1Room destroyed, timer stopped");
         }
     }
     
@@ -167,7 +156,9 @@ Page {
             console.log("Ranked players:", JSON.stringify(sortedPlayers));
             
             // Stop timer
-            countdownTimer.running = false;
+            if (backend) {
+                backend.stopCountdown();
+            }
             
             // Replace to RankingPage - clear navigation history
             stackView.replace("qrc:/qml/RankingPage.qml", { 
@@ -190,7 +181,9 @@ Page {
         console.log("Option D:", optD);
         
         // Stop timer first
-        countdownTimer.running = false;
+        if (backend) {
+            backend.stopCountdown();
+        }
         
         // Set resetting flag to prevent multiple color updates
         isResetting = true;
@@ -220,8 +213,10 @@ Page {
         console.log("After assignment - optionA:", round1Room.optionA);
         console.log("After assignment - optionC:", round1Room.optionC);
         
-        // Start countdown timer after everything is set
-        countdownTimer.running = true;
+        // Start countdown timer from C++ backend
+        if (backend) {
+            backend.startCountdown(15);
+        }
     }
     
     function handleQuestionResult(resultData) {
@@ -230,7 +225,9 @@ Page {
             var result = JSON.parse(resultData);
             
             // Stop timer
-            countdownTimer.running = false;
+            if (backend) {
+                backend.stopCountdown();
+            }
             
             // Set resetting flag to batch updates
             isResetting = true;
@@ -264,18 +261,25 @@ Page {
         }
     }
     
-    Timer {
-        id: countdownTimer
-        interval: 1000
-        running: false
-        repeat: true
-        onTriggered: {
-            if (timeRemaining > 0) {
-                timeRemaining--;
-                console.log("Time remaining:", timeRemaining);
-            } else {
-                running = false;
-            }
+    // Use Connections instead of .connect() to prevent accumulation
+    Connections {
+        target: backend
+        enabled: round1Room.StackView.status === StackView.Active
+        
+        function onQuestionStart(roundId, question, optA, optB, optC, optD) {
+            handleQuestionStart(roundId, question, optA, optB, optC, optD);
+        }
+        
+        function onQuestionResult(resultData) {
+            handleQuestionResult(resultData);
+        }
+        
+        function onGameEnd(rankingData) {
+            handleGameEnd(rankingData);
+        }
+        
+        function onTimerTick(secondsRemaining) {
+            timeRemaining = secondsRemaining;
         }
     }
     

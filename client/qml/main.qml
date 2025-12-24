@@ -122,6 +122,18 @@ ApplicationWindow {
         }
     }
 
+    // Global Connections for system-wide signals (prevents signal accumulation)
+    Connections {
+        target: backEnd
+        
+        function onInviteNotify(invitationId, fromUser, roomCode) {
+            globalInvitePopup.invitationId = invitationId
+            globalInvitePopup.fromUser = fromUser
+            globalInvitePopup.roomCode = roomCode
+            globalInvitePopup.open()
+        }
+    }
+
     Component.onCompleted: {
         currentAction = "connect"
         waitPopup.popMessage = "Đang kết nối đến server..."
@@ -283,6 +295,109 @@ ApplicationWindow {
         }
 
         onOpened: waitPopupTimer.start()
+    }
+
+    // Global Invitation Popup (handles invites from anywhere in the app)
+    Dialog {
+        id: globalInvitePopup
+        anchors.centerIn: parent
+        width: 400
+        height: 250
+        modal: true
+        title: "Room Invitation"
+        
+        property int invitationId: 0
+        property string fromUser: ""
+        property string roomCode: ""
+        
+        background: Rectangle {
+            color: "white"
+            radius: 10
+            border.color: "#5FC8FF"
+            border.width: 3
+        }
+        
+        Column {
+            anchors.centerIn: parent
+            spacing: 20
+            
+            Text {
+                text: globalInvitePopup.fromUser + " invited you to join"
+                font.pixelSize: 18
+                font.bold: true
+                color: "#333"
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            
+            Text {
+                text: "Room: " + globalInvitePopup.roomCode
+                font.pixelSize: 16
+                color: "#5FC8FF"
+                font.bold: true
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            
+            Row {
+                spacing: 20
+                anchors.horizontalCenter: parent.horizontalCenter
+                
+                Rectangle {
+                    width: 120
+                    height: 50
+                    radius: 25
+                    color: "#4CAF50"
+                    border.color: "#388E3C"
+                    border.width: 2
+                    
+                    Text {
+                        anchors.centerIn: parent
+                        text: "ACCEPT"
+                        color: "white"
+                        font.pixelSize: 16
+                        font.bold: true
+                    }
+                    
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (backEnd) {
+                                backEnd.inviteResponse(globalInvitePopup.invitationId, true)
+                            }
+                            globalInvitePopup.close()
+                        }
+                    }
+                }
+                
+                Rectangle {
+                    width: 120
+                    height: 50
+                    radius: 25
+                    color: "#FF5252"
+                    border.color: "#D32F2F"
+                    border.width: 2
+                    
+                    Text {
+                        anchors.centerIn: parent
+                        text: "DECLINE"
+                        color: "white"
+                        font.pixelSize: 16
+                        font.bold: true
+                    }
+                    
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (backEnd) {
+                                backEnd.inviteResponse(globalInvitePopup.invitationId, false)
+                            }
+                            globalInvitePopup.close()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Timers

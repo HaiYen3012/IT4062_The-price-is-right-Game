@@ -54,53 +54,50 @@ Page {
         }
     }
 
+    // Use Connections instead of .connect() to avoid signal accumulation
+    Connections {
+        target: backend
+        enabled: homeUser.StackView.status === StackView.Active
+        
+        function onCreateRoomSuccess() {
+            stackView.push("qrc:/qml/WaitingRoom.qml", { 
+                roomCode: pendingRoomCode,
+                isHost: true,
+                backend: backend
+            })
+        }
+        
+        function onCreateRoomFail() {
+            notifyErrorPopup.popMessage = "Failed to create room!"
+            notifyErrorPopup.open()
+        }
+        
+        function onJoinRoomSuccess() {
+            roomListPopup.close()
+            stackView.push("qrc:/qml/WaitingRoom.qml", { 
+                roomCode: pendingRoomCode,
+                isHost: false,
+                backend: backend
+            })
+        }
+        
+        function onJoinRoomFail() {
+            notifyErrorPopup.popMessage = "Failed to join room!"
+            notifyErrorPopup.open()
+        }
+        
+        function onRoomFull() {
+            notifyErrorPopup.popMessage = "Room is full!"
+            notifyErrorPopup.open()
+        }
+    }
+    
     Component.onCompleted: {
         if (userName === "" && backend) userName = backend.user_name
         
         // Initial load
         refreshOnlineUsers();
         refreshRoomsList();
-        
-        if (backend) {
-            backend.createRoomSuccess.connect(function() {
-                stackView.push("qrc:/qml/WaitingRoom.qml", { 
-                    roomCode: pendingRoomCode,
-                    isHost: true,
-                    backend: backend
-                })
-            })
-            
-            backend.createRoomFail.connect(function() {
-                notifyErrorPopup.popMessage = "Failed to create room!"
-                notifyErrorPopup.open()
-            })
-            
-            backend.joinRoomSuccess.connect(function() {
-                roomListPopup.close()
-                stackView.push("qrc:/qml/WaitingRoom.qml", { 
-                    roomCode: pendingRoomCode,
-                    isHost: false,
-                    backend: backend
-                })
-            })
-            
-            backend.joinRoomFail.connect(function() {
-                notifyErrorPopup.popMessage = "Failed to join room!"
-                notifyErrorPopup.open()
-            })
-            
-            backend.roomFull.connect(function() {
-                notifyErrorPopup.popMessage = "Room is full!"
-                notifyErrorPopup.open()
-            })
-            
-            backend.inviteNotify.connect(function(invitationId, fromUser, roomCode) {
-                invitePopup.invitationId = invitationId
-                invitePopup.fromUser = fromUser
-                invitePopup.roomCode = roomCode
-                invitePopup.open()
-            })
-        }
     }
 
     // Background sunburst
@@ -480,108 +477,4 @@ Page {
         }
     }
     
-    // Invite Popup
-    Popup {
-        id: invitePopup
-        property int invitationId: 0
-        property string fromUser: ""
-        property string roomCode: ""
-        
-        x: (parent.width - 400) / 2
-        y: (parent.height - 200) / 2
-        width: 400
-        height: 200
-        modal: true
-        closePolicy: Popup.NoAutoClose
-        
-        background: Rectangle {
-            color: "#FFFFFF"
-            radius: 16
-            border.color: "#5FC8FF"
-            border.width: 3
-        }
-        
-        Column {
-            anchors.centerIn: parent
-            spacing: 20
-            
-            Text {
-                text: invitePopup.fromUser + " invited you to join"
-                font.pixelSize: 18
-                font.bold: true
-                color: "#333"
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-            
-            Text {
-                text: "Room: " + invitePopup.roomCode
-                font.pixelSize: 16
-                color: "#5FC8FF"
-                font.bold: true
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-            
-            Row {
-                spacing: 20
-                anchors.horizontalCenter: parent.horizontalCenter
-                
-                Rectangle {
-                    width: 120
-                    height: 50
-                    radius: 25
-                    color: "#4CAF50"
-                    border.color: "#388E3C"
-                    border.width: 2
-                    
-                    Text {
-                        anchors.centerIn: parent
-                        text: "ACCEPT"
-                        color: "white"
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-                    
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (backend) {
-                                pendingRoomCode = invitePopup.roomCode
-                                backend.inviteResponse(invitePopup.invitationId, true)
-                            }
-                            invitePopup.close()
-                        }
-                    }
-                }
-                
-                Rectangle {
-                    width: 120
-                    height: 50
-                    radius: 25
-                    color: "#FF5252"
-                    border.color: "#D32F2F"
-                    border.width: 2
-                    
-                    Text {
-                        anchors.centerIn: parent
-                        text: "DECLINE"
-                        color: "white"
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-                    
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (backend) {
-                                backend.inviteResponse(invitePopup.invitationId, false)
-                            }
-                            invitePopup.close()
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

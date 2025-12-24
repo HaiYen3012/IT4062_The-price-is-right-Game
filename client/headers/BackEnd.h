@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QTimer>
 #include <string>
 
 extern "C" {
@@ -44,6 +45,8 @@ public:
     Q_INVOKABLE void submitAnswer(int roundId, QString answer);
     Q_INVOKABLE void submitPrice(int roundId, int guessedPrice);
     Q_INVOKABLE void sendRoundAnswer(QString answer);
+    Q_INVOKABLE void startCountdown(int seconds);
+    Q_INVOKABLE void stopCountdown();
 
 signals:
     void userNameChanged();
@@ -78,12 +81,16 @@ signals:
     void roundResult(QString resultData);
     void gameEnd(QString rankingData);
     void gameStarted(QString data);
+    void timerTick(int secondsRemaining);
 
 public slots:
     void handleMessageFromThread(int msgType, QString msgValue);
 
 private:
     QString user_name;
+    QTimer *m_globalTimer;
+    int m_currentSeconds;
+    void onTimerTimeout();
 };
 
 #endif // BACKEND_H

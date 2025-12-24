@@ -1135,6 +1135,11 @@ int handle_invite_user(Client *cli, char target_username[BUFF_SIZE])
     int to_user_id = atoi(row[0]);
     mysql_free_result(res);
     
+    // Hủy các invitation cũ còn PENDING từ cùng người gửi đến cùng người nhận trong cùng room
+    sprintf(query, "UPDATE invitations SET status = 'EXPIRED' WHERE room_id = %d AND from_user_id = %d AND to_user_id = %d AND status = 'PENDING'", 
+            cli->room_id, from_user_id, to_user_id);
+    mysql_query(g_db_conn, query);
+    
     // Tạo invitation
     sprintf(query, "INSERT INTO invitations (room_id, from_user_id, to_user_id, status) VALUES (%d, %d, %d, 'PENDING')", 
             cli->room_id, from_user_id, to_user_id);
@@ -1565,6 +1570,9 @@ void broadcast_room_state(int room_id)
 
 void send_invite_notification(int to_user_id, int from_user_id, int room_id, int invitation_id)
 {
+    printf("[INVITE_NOTIFY] Called for invitation_id=%d from user_id=%d to user_id=%d room=%d\n", 
+           invitation_id, from_user_id, to_user_id, room_id);
+    
     pthread_mutex_lock(&mutex);
     
     Message msg;
@@ -1593,16 +1601,21 @@ void send_invite_notification(int to_user_id, int from_user_id, int room_id, int
                 if (row != NULL) {
                     char *target_username = row[0];
                     Client *tmp = head_client;
+                    int send_count = 0;
                     while (tmp != NULL) {
                         if (strcmp(tmp->login_account, target_username) == 0) {
                             // Send on async socket if available, otherwise use main socket
                             int target_fd = (tmp->async_conn_fd >= 0) ? tmp->async_conn_fd : tmp->conn_fd;
                             send(target_fd, &msg, sizeof(Message), 0);
-                            printf("Sent INVITE_NOTIFY to %s on fd %d (async=%d)\n", 
-                                   target_username, target_fd, tmp->async_conn_fd);
+                            send_count++;
+                            printf("Sent INVITE_NOTIFY to %s on fd %d (async=%d) [send #%d]\n", 
+                                   target_username, target_fd, tmp->async_conn_fd, send_count);
                             break;
                         }
                         tmp = tmp->next;
+                    }
+                    if (send_count > 1) {
+                        printf("WARNING: Sent invitation notification %d times to %s!\n", send_count, target_username);
                     }
                 }
                 mysql_free_result(res);
