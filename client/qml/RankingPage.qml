@@ -83,7 +83,11 @@ Page {
         }
         navigatedBack = true;
         console.log("Navigating back to WaitingRoom after final ranking");
-        stackView.replace("qrc:/qml/WaitingRoom.qml", { backend: backend });
+        // Use replace to clear navigation history and reset waiting room state
+        stackView.replace("qrc:/qml/WaitingRoom.qml", { 
+            backend: backend,
+            hasReceivedRoomState: false  // Force waiting room to reset ready states
+        });
     }
 
     function leaveRoomAndReturnHome() {
@@ -150,8 +154,9 @@ Page {
                 spacing: 10
                 
                 Text {
-                    text: "🏆"
+                    text: "♛"
                     font.pixelSize: 60
+                    color: "#FFD700"
                     Layout.alignment: Qt.AlignHCenter
                 }
                 
@@ -255,14 +260,17 @@ Page {
                                 Text {
                                     text: {
                                         var rank = modelData.rank || (index + 1);
-                                        if (rank === 1) return "🥇";
-                                        if (rank === 2) return "🥈";
-                                        if (rank === 3) return "🥉";
                                         return "#" + rank;
                                     }
-                                    font.pixelSize: (modelData.rank || index + 1) <= 3 ? 32 : 24
+                                    font.pixelSize: 28
                                     font.bold: true
-                                    color: "white"
+                                    color: {
+                                        var rank = modelData.rank || (index + 1);
+                                        if (rank === 1) return "#FFD700";
+                                        if (rank === 2) return "#C0C0C0";
+                                        if (rank === 3) return "#CD7F32";
+                                        return "white";
+                                    }
                                     Layout.alignment: Qt.AlignHCenter
                                 }
                             }

@@ -53,7 +53,8 @@ Page {
             
             console.log("Ranked players (after delay):", JSON.stringify(rankedPlayers));
             
-            stackView.push("qrc:/qml/RankingPage.qml", {
+            // Replace to RankingPage - clear navigation history
+            stackView.replace("qrc:/qml/RankingPage.qml", {
                 backend: backend,
                 rankings: rankedPlayers,
                 roundNumber: 2

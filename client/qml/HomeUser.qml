@@ -171,8 +171,12 @@ Page {
             Button {
                 text: "LOGOUT"; width: 120; height: 40
                 onClicked: {
-                    if (backend) backend.logOut()
-                    stackView.push("qrc:/qml/HomeGuest.qml")
+                    console.log("Logging out...")
+                    if (backend) {
+                        backend.logOut()
+                    }
+                    // Quay về HomeGuest với backend để có thể login lại
+                    stackView.replace("qrc:/qml/HomeGuest.qml", { backend: backend })
                 }
             }
         }

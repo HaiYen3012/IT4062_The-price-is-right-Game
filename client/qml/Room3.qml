@@ -138,7 +138,7 @@ Page {
                 spinning = false;
                 
                 // Store final rankings for timer callback
-                this.finalRankings = finalRankings;
+                room3.finalRankings = finalRankings;
                 
                 // If popup is showing (or timer is running), let timer close then navigate; otherwise navigate immediately
                 if (!finalRankingPushed) {
@@ -146,8 +146,8 @@ Page {
                         console.log("GAME_END received while popup active -> ensure timer is running; navigation will occur on popup close");
                         round3ResultTimer.start();
                     } else {
-                        console.log("GAME_END received after popup closed -> pushing RankingPage now");
-                        stackView.push("qrc:/qml/RankingPage.qml", {
+                        console.log("GAME_END received after popup closed -> replacing to RankingPage now");
+                        stackView.replace("qrc:/qml/RankingPage.qml", {
                             backend: backend,
                             rankings: finalRankings,
                             roundNumber: 3,
@@ -646,7 +646,7 @@ Page {
                     rankingsCopy = [];
                 }
                 
-                stackView.push("qrc:/qml/RankingPage.qml", {
+                stackView.replace("qrc:/qml/RankingPage.qml", {
                     backend: backend,
                     rankings: rankingsCopy,
                     roundNumber: 3,

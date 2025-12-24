@@ -169,8 +169,8 @@ Page {
             // Stop timer
             countdownTimer.running = false;
             
-            // Push sang RankingPage - hiển thị bảng điểm sau round 1
-            stackView.push("qrc:/qml/RankingPage.qml", { 
+            // Replace to RankingPage - clear navigation history
+            stackView.replace("qrc:/qml/RankingPage.qml", { 
                 backend: backend,
                 rankings: sortedPlayers,
                 roundNumber: 1
