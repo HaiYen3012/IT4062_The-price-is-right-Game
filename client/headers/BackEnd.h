@@ -74,7 +74,7 @@ signals:
     void startGameFail();
     void questionStart(int roundId, QString question, QString optionA, QString optionB, QString optionC, QString optionD, int remainingTime = 15);
     void questionResult(QString resultData);
-    void roundStart(int roundId, QString roundType, QString productName, QString productDesc, int thresholdPct, int timeLimit);
+    void roundStart(int roundId, QString roundType, QString productName, QString productDesc, int thresholdPct, int timeLimit, QString imageUrl);
     void roundResult(QString resultData);
     void gameEnd(QString rankingData);
 

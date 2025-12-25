@@ -2382,7 +2382,7 @@ void start_round2(int room_id, int match_id)
     
     // Get a random product from the products table
     sprintf(query, 
-        "SELECT product_id, name, description, base_price "
+        "SELECT product_id, name, description, base_price, image_url "
         "FROM products "
         "ORDER BY RAND() LIMIT 1");
     
@@ -2406,8 +2406,9 @@ void start_round2(int room_id, int match_id)
     char *product_name = row[1];
     char *product_desc = row[2];
     int base_price = atoi(row[3]);
+    char *image_url = row[4] ? row[4] : "";
     
-    printf("Product: %s - %s (Price: %d VND)\n", product_name, product_desc, base_price);
+    printf("Product: %s - %s (Price: %d VND, Image: %s)\n", product_name, product_desc, base_price, image_url);
     
     // Create round in database with 10% threshold
     sprintf(query, 
@@ -2438,9 +2439,9 @@ void start_round2(int room_id, int match_id)
     Message msg;
     msg.type = ROUND_START;
     
-    // Format: round_id|round_type|product_name|product_desc|threshold_pct|time_limit
-    sprintf(msg.value, "%d|V2|%s|%s|10|20", 
-            round_id, product_name, product_desc);
+    // Format: round_id|round_type|product_name|product_desc|threshold_pct|time_limit|image_url
+    sprintf(msg.value, "%d|V2|%s|%s|10|20|%s", 
+            round_id, product_name, product_desc, image_url);
     
     // Broadcast to all players in room
     Client *tmp = head_client;

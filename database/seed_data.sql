@@ -87,11 +87,11 @@ VALUES
 -- =========================================================
 INSERT INTO products (product_id, name, description, image_url, base_price, created_at)
 VALUES
-  (1, 'Nồi cơm điện',       'Nồi cơm điện 1.8L',                 NULL, 1200000, NOW()),
-  (2, 'Máy sấy tóc',        'Máy sấy tóc mini công suất 1200W', NULL,  250000, NOW()),
-  (3, 'Bình đun siêu tốc',  'Dung tích 1.7L, inox',              NULL,  400000, NOW()),
-  (4, 'Quạt cây',           'Quạt cây 3 tốc độ',                 NULL,  900000, NOW()),
-  (5, 'Tủ lạnh mini',       'Tủ lạnh mini 90L',                  NULL, 3200000, NOW());
+  (1, 'Nồi cơm điện',       'Nồi cơm điện 1.8L',                 'https://product.hstatic.net/200000770233/product/914ba1e4-186f-4362-90e0-57f91440c97b_3acde0c2de3a4215be36a0c96f7c1786.jpeg', 1169000, NOW()),
+  (2, 'Máy sấy tóc',        'Máy sấy tóc Dyson Supersonic Nural™ (Sakura cherry)', 'https://dyson-h.assetsadobe2.com/is/image/content/dam/dyson/leap-petite-global/dynamic-media/personal-care/605gm/primary/Web_605G_BPIBPCHPPI_Tampo_Dynamic_primary_machine.png',  11490000, NOW()),
+  (3, 'Bình đun siêu tốc',  'Dung tích 1.7L, inox',              'https://elmich.vn/wp-content/uploads/2023/10/3856g1-1.jpg',  1689000, NOW()),
+  (4, 'Quạt cây',           'Quạt cây HAWONKOO 3 tốc độ',                 'https://cdn.pico.vn/2023/12/18/170287564774966258843.png?format=webp&quality=100',  999000, NOW()),
+  (5, 'Tủ lạnh mini',       'Tủ lạnh mini 90L',                  'https://tusieuthi123.vn/wp-content/uploads/2023/05/tu-lanh-aqua-aqr-dd99fa-bs.jpg', 3920000, NOW());
 
 -- =========================================================
 -- 7. MATCHES
