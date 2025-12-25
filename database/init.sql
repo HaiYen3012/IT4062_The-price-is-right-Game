@@ -214,5 +214,5 @@ LEFT JOIN round_answers ra ON ra.user_id = u.user_id
 LEFT JOIN rounds r ON r.round_id = ra.round_id
 LEFT JOIN matches m ON m.match_id = r.match_id
 GROUP BY u.user_id, u.username;
-
+ALTER TABLE round_answers ADD UNIQUE INDEX unique_round_user (round_id, user_id);
 

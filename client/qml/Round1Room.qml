@@ -130,19 +130,23 @@ Page {
             backend.questionResult.connect(handleQuestionResult);
             backend.roundStart.connect(handleRoundStart);
             backend.gameEnd.connect(handleGameEnd);
-            
-            // Check if user is spectator
-            isSpectator = backend.isSpectator();
-            console.log("Round1Room initialized - isSpectator:", isSpectator);
-            
             console.log("Round1Room signals connected");
         } else {
             console.error("Backend is null!");
         }
     }
     
+    Component.onDestruction: {
+        // Stop timer when page is destroyed
+        if (backend) {
+            backend.stopCountdown();
+            console.log("Round1Room destroyed, timer stopped");
+        }
+    }
+    
     function handleGameEnd(rankingData) {
-        console.log("Game ended, showing ranking:", rankingData);
+        console.log("=== GAME END received in Round1Room ===");
+        console.log("Ranking data:", rankingData);
         try {
             var data = JSON.parse(rankingData);
             stackView.push("qrc:/qml/RankingPage.qml", { 
@@ -163,8 +167,7 @@ Page {
         
         // Chuyển sang Round2Room
         stackView.push("qrc:/qml/Round2Room.qml", {
-            backend: backend,
-            isSpectator: isSpectator
+            backend: backend
         });
     }
     
@@ -179,7 +182,9 @@ Page {
         console.log("Remaining Time:", remainingTime);
         
         // Stop timer first
-        countdownTimer.running = false;
+        if (backend) {
+            backend.stopCountdown();
+        }
         
         // Set resetting flag to prevent multiple color updates
         isResetting = true;
@@ -216,8 +221,10 @@ Page {
         console.log("After assignment - optionC:", round1Room.optionC);
         console.log("Starting timer with:", timeRemaining, "seconds");
         
-        // Start countdown timer after everything is set
-        countdownTimer.running = true;
+        // Start countdown timer from C++ backend
+        if (backend) {
+            backend.startCountdown(15);
+        }
     }
     
     function handleQuestionResult(resultData) {
@@ -226,7 +233,9 @@ Page {
             var result = JSON.parse(resultData);
             
             // Stop timer
-            countdownTimer.running = false;
+            if (backend) {
+                backend.stopCountdown();
+            }
             
             // Set resetting flag to batch updates
             isResetting = true;
@@ -264,18 +273,25 @@ Page {
         }
     }
     
-    Timer {
-        id: countdownTimer
-        interval: 1000
-        running: false
-        repeat: true
-        onTriggered: {
-            if (timeRemaining > 0) {
-                timeRemaining--;
-                console.log("Time remaining:", timeRemaining);
-            } else {
-                running = false;
-            }
+    // Use Connections instead of .connect() to prevent accumulation
+    Connections {
+        target: backend
+        enabled: round1Room.StackView.status === StackView.Active
+        
+        function onQuestionStart(roundId, question, optA, optB, optC, optD) {
+            handleQuestionStart(roundId, question, optA, optB, optC, optD);
+        }
+        
+        function onQuestionResult(resultData) {
+            handleQuestionResult(resultData);
+        }
+        
+        function onGameEnd(rankingData) {
+            handleGameEnd(rankingData);
+        }
+        
+        function onTimerTick(secondsRemaining) {
+            timeRemaining = secondsRemaining;
         }
     }
     

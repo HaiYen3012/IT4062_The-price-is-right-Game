@@ -17,6 +17,10 @@ Page {
     property var backend: null
     property var roomMembers: []
     
+    // Invite button debounce
+    property var lastInvitedPlayer: ""
+    property int lastInviteTime: 0
+    
     // Player ready states
     property var playerReadyStates: [true, false, false, false] // Host always ready
     // Spectator states
@@ -24,6 +28,26 @@ Page {
     
     // Revision counter to force QML re-render when arrays change
     property int stateRevision: 0
+    property bool hasReceivedRoomState: false  // Track if we've received room state from server
+    
+    // Function to reset all ready states (except host)
+    function resetReadyStates() {
+        console.log("Resetting ready states for new game")
+        // Only reset if we haven't received room state from server yet
+        if (!hasReceivedRoomState) {
+            for (var i = 0; i < playerReadyStates.length; i++) {
+                if (i === 0) {
+                    playerReadyStates[i] = true; // Host always ready
+                } else {
+                    playerReadyStates[i] = false; // Others not ready
+                }
+            }
+            if (backend && backend.user_name !== hostName) {
+                isReady = false; // Reset current user's ready state if not host
+            }
+            stateRevision++; // Force UI update
+        }
+    }
     
     function allPlayersReady() {
         for (var i = 0; i < currentPlayers; i++) {
@@ -85,12 +109,10 @@ Page {
             for (var i = 0; i < members.length; i++) {
                 newMembers.push(members[i].username);
                 newReadyStates.push(members[i].is_ready);
-                newSpectatorStates.push(members[i].is_spectator || false);
                 
-                // Update current user's ready state and spectator status
+                // Update current user's ready state
                 if (members[i].username === backend.user_name) {
                     isReady = members[i].is_ready;
-                    isSpectator = members[i].is_spectator || false;
                 }
             }
             
@@ -99,11 +121,12 @@ Page {
             playerReadyStates = newReadyStates;
             playerSpectatorStates = newSpectatorStates;
             currentPlayers = roomMembers.length;
+            hasReceivedRoomState = true;  // Mark that we've received room state
             
             // Increment revision to force UI update
             stateRevision++;
             
-            console.log("Room state parsed:", roomMembers, "Ready states:", playerReadyStates, "Spectator states:", playerSpectatorStates);
+            console.log("Room state parsed:", roomMembers, "Ready states:", playerReadyStates);
         } catch (e) {
             console.error("Failed to parse room state:", e, stateJson);
         }
@@ -144,10 +167,11 @@ Page {
     Component.onCompleted: {
         refreshRoomInfo();
         refreshOnlineUsers();
+        resetReadyStates(); // Reset ready states when entering waiting room
         
         if (backend) {
             backend.leaveRoomSuccess.connect(function() {
-                stackView.pop()
+                stackView.replace("qrc:/qml/HomeUser.qml", { userName: backend.user_name, backend: backend })
             })
             
             backend.inviteSuccess.connect(function() {
@@ -165,14 +189,11 @@ Page {
             })
             
             backend.startGameSuccess.connect(function() {
-                console.log("=== GAME STARTED SIGNAL RECEIVED ===")
-                console.log("Current user:", backend.user_name)
-                console.log("Navigating to Round1Room...")
+                console.log("=== GAME STARTED SIGNAL RECEIVED (WAITING ROOM) ===")
+                //console.log("Current user:", backend.user_name)
+                //console.log("Navigating to Round1Room...")
                 // Navigate to Round 1 game screen
-                stackView.push("qrc:/qml/Round1Room.qml", { 
-                    backend: backend,
-                    isSpectator: isSpectator
-                })
+                stackView.push("qrc:/qml/Round1Room.qml", { backend: backend })
             })
             
             backend.startGameFail.connect(function() {
@@ -180,14 +201,16 @@ Page {
             })
             
             backend.updateRoomState.connect(function(membersJson) {
+                console.log("=== UPDATE_ROOM_STATE received ===")
                 console.log("Room state updated:", membersJson)
                 parseRoomState(membersJson)
+                console.log("After parsing - isReady:", isReady, "isHost:", isHost)
             })
             
             backend.kickedFromRoom.connect(function(hostName) {
                 console.log("Kicked from room by:", hostName)
                 // Show notification and return to home
-                stackView.pop()
+                stackView.replace("qrc:/qml/HomeUser.qml", { userName: backend.user_name, backend: backend })
             })
             
             backend.kickSuccess.connect(function() {
@@ -366,7 +389,17 @@ Page {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
+                                    var currentTime = Date.now()
+                                    // Prevent double-click (debounce 1000ms)
+                                    if (lastInvitedPlayer === playerName && (currentTime - lastInviteTime) < 1000) {
+                                        console.log("Ignoring duplicate invite for:", playerName)
+                                        return
+                                    }
+                                    
                                     console.log("Invite player:", playerName)
+                                    lastInvitedPlayer = playerName
+                                    lastInviteTime = currentTime
+                                    
                                     if (backend) {
                                         backend.inviteUser(playerName)
                                     }
@@ -671,8 +704,10 @@ Page {
                         onClicked: {
                             if (backend) {
                                 backend.leaveRoom()
+                                // Quay về màn hình chính thay vì pop
+                                stackView.replace("qrc:/qml/HomeUser.qml", { userName: backend.user_name, backend: backend })
                             } else {
-                                stackView.pop()
+                                stackView.replace("qrc:/qml/HomeUser.qml", { userName: backend.user_name, backend: backend })
                             }
                         }
                     }
@@ -700,9 +735,12 @@ Page {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
+                            console.log("Ready button clicked! Current isReady:", isReady)
                             isReady = !isReady
+                            console.log("New isReady:", isReady)
                             if (backend) {
                                 backend.readyToggle()
+                                console.log("Called backend.readyToggle()")
                             }
                         }
                     }

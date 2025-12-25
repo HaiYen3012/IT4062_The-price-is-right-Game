@@ -21,6 +21,8 @@ Page {
     property int actualPrice: 0
     property bool showResult: false
     property var playerScores: []
+    property bool round2Started: false  // Track xem round 2 đã bắt đầu hay chưa
+    property bool isNavigatingAway: false  // Flag để ngăn xử lý messages sau khi navigate
     
     // Nhận parameters từ navigation
     property int roundId: 0
@@ -29,6 +31,48 @@ Page {
     property string prodDesc: ""
     property int threshold: 10
     property int timeLimit_: 20
+    
+    // Timer để delay push RankingPage
+    Timer {
+        id: rankingDelayTimer
+        interval: 500
+        running: false
+        onTriggered: {
+            // Thêm rank vào playerScores trước khi push
+            var rankedPlayers = [];
+            if (playerScores && playerScores.length > 0) {
+                // Sort by score descending
+                var sortedPlayers = playerScores.slice().sort(function(a, b) {
+                    return (b.score || 0) - (a.score || 0);
+                });
+                // Thêm rank
+                for (var i = 0; i < sortedPlayers.length; i++) {
+                    sortedPlayers[i].rank = i + 1;
+                }
+                rankedPlayers = sortedPlayers;
+            }
+            
+            console.log("Ranked players (after delay):", JSON.stringify(rankedPlayers));
+            
+            // Replace to RankingPage - clear navigation history
+            stackView.replace("qrc:/qml/RankingPage.qml", {
+                backend: backend,
+                rankings: rankedPlayers,
+                roundNumber: 2
+            });
+        }
+    }
+    
+    // Timer để tự động chuyển sang ranking sau khi hiển thị kết quả
+    Timer {
+        id: resultDisplayTimer
+        interval: 3000  // Hiển thị kết quả 3 giây rồi push RankingPage
+        running: false
+        onTriggered: {
+            console.log("Round2Room: Result display timeout - pushing to RankingPage");
+            rankingDelayTimer.running = true;
+        }
+    }
     
     Component.onCompleted: {
         console.log("Round2Room loaded, backend:", backend);
@@ -45,78 +89,160 @@ Page {
             timeRemaining = timeLimit_;
             priceSubmitted = false;
             showResult = false;
-            countdownTimer.running = true;
+            if (backend) {
+                backend.startCountdown(timeLimit_);
+            }
         }
         
-        if (backend) {
-            backend.roundStart.connect(handleRoundStart);
-            backend.roundResult.connect(handleRoundResult);
-            backend.gameEnd.connect(handleGameEnd);
-            console.log("Round2Room signals connected");
-        } else {
+        if (!backend) {
             console.error("Backend is null!");
         }
     }
     
+    Component.onDestruction: {
+        // Stop timer when page is destroyed
+        if (backend) {
+            backend.stopCountdown();
+            console.log("Round2Room destroyed, timer stopped");
+        }
+    }
+    
     function handleGameEnd(rankingData) {
-        console.log("Game ended, showing ranking:", rankingData);
+        // Guard: Nếu đang navigate away, bỏ qua
+        if (isNavigatingAway) {
+            console.log("Round2Room: Ignoring GAME_END because navigating away");
+            return;
+        }
+        
+        console.log("=== GAME END received in Round2Room ===" );
+        console.log("Ranking data:", rankingData);
         try {
             var data = JSON.parse(rankingData);
-            stackView.push("qrc:/qml/RankingPage.qml", { 
+            console.log("Parsed ranking data, players count:", data.players ? data.players.length : 0);
+            
+            // Tắt timer
+            if (backend) {
+                backend.stopCountdown();
+            }
+            
+            // Replace (không push) sang RankingPage final với tổng điểm cả 3 vòng
+            stackView.replace("qrc:/qml/RankingPage.qml", { 
                 backend: backend,
-                rankings: data.players,
-                roundNumber: 2  // Round 2 ranking
+                rankings: data.players || [],
+                roundNumber: 3,
+                isFinalRanking: true
             });
         } catch (e) {
-            console.error("Failed to parse ranking data:", e);
+            console.error("Round2Room - Failed to parse GAME_END data:", e);
         }
     }
     
     function handleRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit_, imageUrl) {
-        console.log("=== Round 2 Start ===");
+        console.log("=== handleRoundStart called ===");
         console.log("Round:", roundId, "Type:", roundType);
-        console.log("Product:", prodName, "-", prodDesc);
-        console.log("Threshold:", threshold, "% Time:", timeLimit_, "s");
-        console.log("Image URL:", imageUrl);
+        console.log("round2Started:", round2Started);
         
-        // Stop timer
-        countdownTimer.running = false;
-        
-        // Update Round 2 data
-        round2Id = roundId;
-        productName = prodName;
-        productDesc = prodDesc;
-        productImage = imageUrl || "";
-        thresholdPct = threshold;
-        timeLimit = timeLimit_;
-        timeRemaining = timeLimit_;
-        
-        // Reset state
-        guessedPrice = 0;
-        priceSubmitted = false;
-        showResult = false;
-        actualPrice = 0;
-        playerScores = [];
-        
-        // Start timer
-        countdownTimer.running = true;
+        // Nếu Round 2 chưa bắt đầu -> khởi động Round 2
+        if (!round2Started) {
+            console.log("=== Round 2 Start ===");
+            console.log("Product:", prodName, "-", prodDesc);
+            console.log("Threshold:", threshold, "% Time:", timeLimit_, "s");
+            
+            // Stop timer
+            if (backend) {
+                backend.stopCountdown();
+            }
+            
+            // Update Round 2 data
+            round2Id = roundId;
+            productName = prodName;
+            productDesc = prodDesc;
+            productImage = imageUrl || "";
+            thresholdPct = threshold;
+            timeLimit = timeLimit_;
+            timeRemaining = timeLimit_;
+            round2Started = true;
+            
+            // Reset state
+            guessedPrice = 0;
+            priceSubmitted = false;
+            showResult = false;
+            actualPrice = 0;
+            playerScores = [];
+            
+            // Start timer
+            if (backend) {
+                backend.startCountdown(timeLimit_);
+            }
+        } else {
+            // Round 2 đã bắt đầu -> này là ROUND_START cho round tiếp theo (Round 3)
+            console.log("=== ROUND_START Round 3 received - Navigating to Room3 ===");
+            console.log("Round 3 type:", roundType);
+            if (backend) {
+                backend.stopCountdown();
+            }
+            resultDisplayTimer.running = false;
+            rankingDelayTimer.running = false;
+            
+            // Set flag để ngăn xử lý thêm messages
+            isNavigatingAway = true;
+            
+            // Disconnect signals trước khi navigate để tránh nhận messages cho Round 3
+            if (backend) {
+                try {
+                    backend.roundStart.disconnect(handleRoundStart);
+                    backend.roundResult.disconnect(handleRoundResult);
+                    backend.gameEnd.disconnect(handleGameEnd);
+                    console.log("Round2Room signals disconnected before navigating to Room3");
+                } catch (e) {
+                    console.log("Error disconnecting signals:", e);
+                }
+            }
+            
+            // Chuyển sang Room3
+            stackView.replace("qrc:/qml/Room3.qml", { 
+                backend: backend
+            });
+        }
     }
     
     function handleRoundResult(resultData) {
-        console.log("Round 2 Result received:", resultData);
+        // Guard: Nếu đang navigate away, bỏ qua tất cả messages
+        if (isNavigatingAway) {
+            console.log("Round2Room: Ignoring message because navigating away");
+            return;
+        }
+        
         try {
             var result = JSON.parse(resultData);
             
-            // Stop timer
-            countdownTimer.running = false;
-            
-            // Update result data
+            // CỬA BẢO VỆ: Nếu tin nhắn không phải của Round 2 (không có actual_price) thì bỏ qua
+            if (result.actual_price === undefined) {
+                console.log("Round2Room: Nhận nhầm dữ liệu của Round khác, bỏ qua.");
+                return;
+            }
+
             actualPrice = result.actual_price;
-            playerScores = result.players;
+            playerScores = result.players || [];
             showResult = true;
+            if (backend) {
+                backend.stopCountdown();
+            }
+            console.log("Round2Room - Kết quả hiển thị: giá thực:", actualPrice, "điểm người chơi:", playerScores.length);
             
+            // Chỉ stringify nếu playerScores hợp lệ
+            if (playerScores && playerScores.length > 0) {
+                try {
+                    console.log("Round2Room - playerScores data:", JSON.stringify(playerScores));
+                } catch (e) {
+                    console.log("Round2Room - Could not stringify playerScores:", e);
+                }
+            }
+            
+            // Start timer to show result for 3 seconds, then push to ranking
+            resultDisplayTimer.running = true;
         } catch (e) {
-            console.error("Failed to parse round result:", e);
+            console.error("Round2Room - Lỗi parse kết quả:", e);
         }
     }
     
@@ -135,17 +261,25 @@ Page {
         }
     }
     
-    Timer {
-        id: countdownTimer
-        interval: 1000
-        running: false
-        repeat: true
-        onTriggered: {
-            if (timeRemaining > 0) {
-                timeRemaining--;
-            } else {
-                running = false;
-            }
+    // Use Connections instead of .connect() to prevent accumulation
+    Connections {
+        target: backend
+        enabled: round2Room.StackView.status === StackView.Active && !isNavigatingAway
+        
+        function onRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit_, imageUrl) {
+            handleRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit_, imageUrl);
+        }
+        
+        function onRoundResult(resultData) {
+            handleRoundResult(resultData);
+        }
+        
+        function onGameEnd(rankingData) {
+            handleGameEnd(rankingData);
+        }
+        
+        function onTimerTick(secondsRemaining) {
+            timeRemaining = secondsRemaining;
         }
     }
     
@@ -527,21 +661,23 @@ Page {
                     
                     RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 15
-                        spacing: 10
+                        anchors.margins: 10
+                        spacing: 5
                         
                         TextField {
                             id: priceInput
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             text: ""
-                            placeholderText: isSpectator ? "Spectators cannot enter price" : "Enter price (VND)..."
+                            placeholderText: "Enter price (VND)..."
                             font.pixelSize: 32
                             font.bold: true
                             color: "#7C3AED"
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             enabled: !priceSubmitted && !showResult
+                            leftPadding: 10
+                            rightPadding: 10
                             
                             validator: IntValidator {
                                 bottom: 0
@@ -558,17 +694,18 @@ Page {
                                 }
                             }
                             
-                            background: Rectangle {
-                                color: "transparent"
-                                border.width: 0
-                            }
+                            background: Item {}
+                            
+                            // Placeholder text style
+                            placeholderTextColor: "#C4B5FD"
                         }
                         
                         Text {
                             text: "đ"
-                            font.pixelSize: 26
+                            font.pixelSize: 24
                             font.bold: true
                             color: "#7C3AED"
+                            verticalAlignment: Text.AlignVCenter
                         }
                     }
                 }

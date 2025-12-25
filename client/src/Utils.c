@@ -484,7 +484,7 @@ void *message_listener_thread(void *arg)
     
     if (g_message_callback)
     {
-      g_message_callback(msg);
+      g_message_callback(&msg);
     }
   }
   

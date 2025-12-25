@@ -78,44 +78,11 @@ Page {
             
             backend.joinRoomSuccess.connect(function() {
                 roomListPopup.close()
-                
-                // Kiểm tra xem phòng đang ở trạng thái gì
-                try {
-                    var roomInfoJson = backend.getRoomInfo();
-                    if (roomInfoJson && roomInfoJson !== "") {
-                        var roomInfo = JSON.parse(roomInfoJson);
-                        
-                        // Nếu phòng đang PLAYING -> vào màn hình game (spectator mode)
-                        if (roomInfo.status === "PLAYING") {
-                            console.log("Joining PLAYING room as spectator, navigating to Round1Room...");
-                            stackView.push("qrc:/qml/Round1Room.qml", { 
-                                backend: backend,
-                                isSpectator: true
-                            });
-                        } else {
-                            // Phòng LOBBY -> vào WaitingRoom bình thường
-                            stackView.push("qrc:/qml/WaitingRoom.qml", { 
-                                roomCode: pendingRoomCode,
-                                isHost: false,
-                                backend: backend
-                            });
-                        }
-                    } else {
-                        // Fallback nếu không lấy được room info
-                        stackView.push("qrc:/qml/WaitingRoom.qml", { 
-                            roomCode: pendingRoomCode,
-                            isHost: false,
-                            backend: backend
-                        });
-                    }
-                } catch (e) {
-                    console.error("Error checking room status:", e);
-                    stackView.push("qrc:/qml/WaitingRoom.qml", { 
-                        roomCode: pendingRoomCode,
-                        isHost: false,
-                        backend: backend
-                    });
-                }
+                stackView.push("qrc:/qml/WaitingRoom.qml", { 
+                    roomCode: pendingRoomCode,
+                    isHost: false,
+                    backend: backend
+                })
             })
             
             backend.joinRoomFail.connect(function() {
@@ -205,8 +172,12 @@ Page {
             Button {
                 text: "LOGOUT"; width: 120; height: 40
                 onClicked: {
-                    if (backend) backend.logOut()
-                    stackView.push("qrc:/qml/HomeGuest.qml")
+                    console.log("Logging out...")
+                    if (backend) {
+                        backend.logOut()
+                    }
+                    // Quay về HomeGuest với backend để có thể login lại
+                    stackView.replace("qrc:/qml/HomeGuest.qml", { backend: backend })
                 }
             }
         }
@@ -544,108 +515,4 @@ Page {
         }
     }
     
-    // Invite Popup
-    Popup {
-        id: invitePopup
-        property int invitationId: 0
-        property string fromUser: ""
-        property string roomCode: ""
-        
-        x: (parent.width - 400) / 2
-        y: (parent.height - 200) / 2
-        width: 400
-        height: 200
-        modal: true
-        closePolicy: Popup.NoAutoClose
-        
-        background: Rectangle {
-            color: "#FFFFFF"
-            radius: 16
-            border.color: "#5FC8FF"
-            border.width: 3
-        }
-        
-        Column {
-            anchors.centerIn: parent
-            spacing: 20
-            
-            Text {
-                text: invitePopup.fromUser + " invited you to join"
-                font.pixelSize: 18
-                font.bold: true
-                color: "#333"
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-            
-            Text {
-                text: "Room: " + invitePopup.roomCode
-                font.pixelSize: 16
-                color: "#5FC8FF"
-                font.bold: true
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-            
-            Row {
-                spacing: 20
-                anchors.horizontalCenter: parent.horizontalCenter
-                
-                Rectangle {
-                    width: 120
-                    height: 50
-                    radius: 25
-                    color: "#4CAF50"
-                    border.color: "#388E3C"
-                    border.width: 2
-                    
-                    Text {
-                        anchors.centerIn: parent
-                        text: "ACCEPT"
-                        color: "white"
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-                    
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (backend) {
-                                pendingRoomCode = invitePopup.roomCode
-                                backend.inviteResponse(invitePopup.invitationId, true)
-                            }
-                            invitePopup.close()
-                        }
-                    }
-                }
-                
-                Rectangle {
-                    width: 120
-                    height: 50
-                    radius: 25
-                    color: "#FF5252"
-                    border.color: "#D32F2F"
-                    border.width: 2
-                    
-                    Text {
-                        anchors.centerIn: parent
-                        text: "DECLINE"
-                        color: "white"
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-                    
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (backend) {
-                                backend.inviteResponse(invitePopup.invitationId, false)
-                            }
-                            invitePopup.close()
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

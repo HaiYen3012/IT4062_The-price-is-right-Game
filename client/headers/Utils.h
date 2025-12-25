@@ -108,7 +108,7 @@ typedef struct _account
 } Account;
 
 // Callback for async messages
-typedef void (*MessageCallback)(Message msg);
+typedef void (*MessageCallback)(Message* msg);
 
 // Global state
 extern int g_is_spectator;  // 0 = player, 1 = spectator
