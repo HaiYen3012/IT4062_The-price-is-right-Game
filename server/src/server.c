@@ -369,6 +369,11 @@ void *handle_client(void *arg)
                 
                 cli->login_status = UN_AUTH;
                 memset(cli->login_account, 0, sizeof(cli->login_account));
+                
+                // Send logout success response
+                Message response;
+                response.type = LOGOUT_SUCCESS;
+                send(conn_fd, &response, sizeof(Message), 0);
                 break;
                 
             case GET_ROOMS:
