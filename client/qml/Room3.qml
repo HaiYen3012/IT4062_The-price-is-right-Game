@@ -85,12 +85,58 @@ Page {
         target: backend
         enabled: room3.StackView.status === StackView.Active
         
+        function onUpdateRoomState(data) {
+            console.log("Room3 - onUpdateRoomState:", data);
+            try {
+                var info = JSON.parse(data);
+                if (info.members) {
+                    var memberNames = info.members.split('|');
+                    console.log("Room members update, count:", memberNames.length);
+                    
+                    // KHÔNG rebuild playersModel vì sẽ làm mất index
+                    // Chỉ kiểm tra xem có người rời không (để xử lý nếu cần)
+                    
+                    // Nếu không còn ai, quay về home
+                    if (memberNames.length === 0) {
+                        console.log("All players left, returning to home");
+                        stackView.replace("qrc:/qml/HomeUser.qml", {backend: backend});
+                    } else if (memberNames.length === 1) {
+                        console.log("Only 1 player remaining, game continues");
+                    }
+                }
+            } catch (e) {
+                console.error("Room3 - Failed to parse UPDATE_ROOM_STATE:", e);
+            }
+        }
+        
+        function onLeaveRoomSuccess() {
+            console.log("Room3 - Leave room successful");
+            stackView.replace("qrc:/qml/HomeUser.qml", {backend: backend});
+        }
+        
         function onRoundResult(resultJson) {
             try {
                 var res = JSON.parse(resultJson)
                 console.log("Receive:", resultJson)
 
-                if (res.type === "SPIN_RESULT") {
+                if (res.type === "PLAYER_LEFT") {
+                    // Người chơi rời phòng
+                    console.log("Player left:", res.username);
+                    
+                    // Đánh dấu người chơi đã rời
+                    for (var i = 0; i < playersModel.count; i++) {
+                        if (playersModel.get(i).name === res.username) {
+                            playersModel.set(i, { 
+                                name: playersModel.get(i).name, 
+                                score: playersModel.get(i).score, 
+                                eliminated: true  // Đánh dấu đã OUT
+                            });
+                            console.log("Marked player", res.username, "as eliminated");
+                            break;
+                        }
+                    }
+                }
+                else if (res.type === "SPIN_RESULT") {
                     // CHỈ gán result khi đúng là tin nhắn quay số
                     currentServerResult = res 
                     var p = playersModel.get(currentPlayerIndex)
@@ -108,7 +154,7 @@ Page {
                 else if (res.type === "ROUND3_END") {
                     // Round 3 ended - store results and show popup
                     console.log("Vòng 3 kết thúc - Nhận kết quả:", JSON.stringify(res));
-                    round3Results = res.details || [];  // Array of {user, score}
+                    round3Results = res.details || [];  // Array of {user, score, left}
                     spinning = false;
                     
                     // Show result popup
@@ -344,9 +390,11 @@ Page {
             model: playersModel.count
             delegate: Rectangle {
                 visible: playersModel.get(index).name !== myUserName
-                width: 160; height: 110; radius: 12; color: "#FFDCC5"
+                width: 160; height: 110; radius: 12
+                color: playersModel.get(index).eliminated ? "#CCCCCC" : "#FFDCC5"
                 border.width: currentPlayerIndex === index ? 3 : 0
                 border.color: "#29B6F6"
+                opacity: playersModel.get(index).eliminated ? 0.6 : 1.0
                 
                 Column { 
                     anchors.fill: parent; anchors.margins: 10; spacing: 6; anchors.horizontalCenter: parent.horizontalCenter
@@ -363,6 +411,26 @@ Page {
                             source: "qrc:/ui/pic.png"
                             width: 48; height: 48
                             fillMode: Image.PreserveAspectFit
+                            opacity: playersModel.get(index).eliminated ? 0.5 : 1.0
+                        }
+                        
+                        // OUT badge
+                        Rectangle {
+                            visible: playersModel.get(index).eliminated
+                            width: 35; height: 18
+                            radius: 4
+                            color: "#DC2626"
+                            anchors.bottom: parent.bottom
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottomMargin: -5
+                            
+                            Text {
+                                anchors.centerIn: parent
+                                text: "OUT"
+                                font.pixelSize: 10
+                                font.bold: true
+                                color: "white"
+                            }
                         }
                     }
                     
@@ -370,7 +438,7 @@ Page {
                         text: playersModel.get(index).name
                         font.bold: true
                         font.pixelSize: 13
-                        color: currentPlayerIndex === index ? "#0B5E8A" : "#222"
+                        color: playersModel.get(index).eliminated ? "#888888" : (currentPlayerIndex === index ? "#0B5E8A" : "#222")
                         anchors.horizontalCenter: parent.horizontalCenter
                         elide: Text.ElideRight
                         width: parent.width - 10
@@ -381,8 +449,8 @@ Page {
                         width: 100
                         height: 28
                         radius: 14
-                        color: "#FF9800"
-                        border.color: "#F57C00"
+                        color: playersModel.get(index).eliminated ? "#999999" : "#FF9800"
+                        border.color: playersModel.get(index).eliminated ? "#777777" : "#F57C00"
                         border.width: 2
                         anchors.horizontalCenter: parent.horizontalCenter
                         
@@ -611,10 +679,45 @@ Page {
 
     Rectangle {
         id: footerBar
-        height: 50
+        height: 80
         anchors.bottom: parent.bottom
         width: parent.width
         z: 10
+        color: "transparent"
+        
+        // Leave button
+        Rectangle {
+            anchors.centerIn: parent
+            width: 120
+            height: 45
+            radius: 8
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: "#DC2626" }
+                GradientStop { position: 1.0; color: "#991B1B" }
+            }
+            
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    if (backend) {
+                        console.log("Leaving room from Round 3");
+                        spinning = false;
+                        shuffleTimer.stop();
+                        round3ResultTimer.stop();
+                        backend.leaveRoom();
+                        // Không replace ngay, chờ onLeaveRoomSuccess signal
+                    }
+                }
+            }
+            
+            Text {
+                anchors.centerIn: parent
+                text: "LEAVE"
+                font.pixelSize: 16
+                font.bold: true
+                color: "#FFFFFF"
+            }
+        }
     }
     
     // Round 3 Result Popup
@@ -820,5 +923,17 @@ Page {
         playersModel.append({ name: me, score: 0, eliminated: false })
         playersModel.append({ name: "Player 1", score: 0, eliminated: false })
         currentPlayerIndex = 0
+    }
+    
+    // System Notice Popup
+    SystemNoticePopup {
+        id: systemNoticePopup
+    }
+    
+    Connections {
+        target: backend
+        function onSystemNotice(message) {
+            systemNoticePopup.show(message)
+        }
     }
 }

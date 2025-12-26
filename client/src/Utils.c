@@ -286,11 +286,10 @@ int leave_room()
     printf("Send failed\n");
     return -1;
   }
-  if (recv(sockfd, &msg, sizeof(Message), 0) < 0) {
-    printf("Receive failed\n");
-    return -1;
-  }
-  return msg.type;
+  // Không chờ response đồng bộ nữa - để async listener xử lý
+  // Response sẽ được nhận qua message_listener và emit signal leaveRoomSuccess
+  printf("Leave room request sent\n");
+  return 0; // Return success ngay sau khi send
 }
 
 int invite_user(char username[])

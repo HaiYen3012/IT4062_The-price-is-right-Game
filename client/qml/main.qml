@@ -87,10 +87,11 @@ ApplicationWindow {
         }
         onGameStarted: {
             console.log("Điều hướng game: " + data)
-            if (data === "Game is starting!") {
+            // Don't navigate here - WaitingRoom will handle navigation when QUESTION_START arrives
+            /* if (data === "Game is starting!") {
                 stackView.replace("qrc:/qml/Round1Room.qml", { backend: backEnd })
                 return
-            }
+            } */
             try {
                 var gameData = JSON.parse(data)
                 if (gameData.type === "ROUND_START") {

@@ -138,9 +138,12 @@ typedef struct _match {
     int room_id;
     int player_ids[MAX_PLAYERS];
     char player_names[MAX_PLAYERS][BUFF_SIZE];
+    int r1_scores[MAX_PLAYERS];  // Điểm vòng 1
+    int r2_scores[MAX_PLAYERS];  // Điểm vòng 2
     int r3_scores[MAX_PLAYERS];
     int r3_spins[MAX_PLAYERS];
     int r3_passed[MAX_PLAYERS];
+    int has_left[MAX_PLAYERS];  // 1 nếu player đã rời, 0 nếu còn
     int count_players;
     int current_round;
     int current_turn_index;

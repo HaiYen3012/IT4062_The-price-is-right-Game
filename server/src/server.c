@@ -481,8 +481,15 @@ void *handle_client(void *arg)
                 {
                     int old_room = cli->room_id;
                     result = handle_leave_room(cli);
+                    
+                    // Gửi response qua async socket nếu có, nếu không thì qua socket chính
                     msg.type = result;
-                    send(conn_fd, &msg, sizeof(Message), 0);
+                    int target_fd = (cli->async_conn_fd >= 0) ? cli->async_conn_fd : conn_fd;
+                    int sent = send(target_fd, &msg, sizeof(Message), 0);
+                    printf("[%d] Sent LEAVE_ROOM_SUCCESS response via fd=%d, bytes=%d\n", 
+                           conn_fd, target_fd, sent);
+                    
+                    // Broadcast cho các client còn lại SAU KHI đã gửi response
                     if (result == LEAVE_ROOM_SUCCESS && old_room > 0) {
                         broadcast_room_state(old_room);
                     }
@@ -1025,10 +1032,148 @@ int handle_leave_room(Client *cli)
     int user_id = atoi(row[0]);
     mysql_free_result(res);
     
-    // Cập nhật left_at
+    // Kiểm tra xem có game đang chơi không
+    Match *m = find_match(room_id);
+    int game_in_progress = (m != NULL);
+    
+    // Lưu điểm số hiện tại nếu đang trong game
+    if (game_in_progress) {
+        printf("[%d] Player leaving during game, saving current score\n", cli->conn_fd);
+        
+        // Tìm index của player trong match
+        int player_idx = -1;
+        for (int i = 0; i < m->count_players; i++) {
+            if (m->player_ids[i] == user_id) {
+                player_idx = i;
+                m->has_left[i] = 1;  // Đánh dấu đã rời
+                printf("[%d] Marked player %s (idx=%d) as LEFT\n", cli->conn_fd, m->player_names[i], i);
+                break;
+            }
+        }
+        
+        // Tìm current match_id
+        sprintf(query, "SELECT match_id FROM matches WHERE room_id = %d AND ended_at IS NULL LIMIT 1", room_id);
+        int current_match_id = 0;
+        if (mysql_query(g_db_conn, query) == 0) {
+            res = mysql_store_result(g_db_conn);
+            row = mysql_fetch_row(res);
+            if (row) current_match_id = atoi(row[0]);
+            mysql_free_result(res);
+        }
+        
+        if (current_match_id > 0) {
+            // Lưu điểm số hiện tại vào round_answers cho tất cả các vòng đã chơi
+            // Điểm được tự động lưu khi người chơi trả lời, nên không cần làm gì thêm
+            printf("[%d] Current score saved for user_id=%d in match_id=%d\n", cli->conn_fd, user_id, current_match_id);
+        }
+        
+        // Broadcast thông báo người chơi rời cho TẤT CẢ người còn lại trong phòng
+        char leave_message[BUFF_SIZE];
+        sprintf(leave_message, "%s đã rời khỏi phòng", cli->login_account);
+        
+        Message notice_msg;
+        notice_msg.type = SYSTEM_NOTICE;
+        strcpy(notice_msg.value, leave_message);
+        
+        Client *tmp_cli = head_client;
+        while (tmp_cli != NULL) {
+            if (tmp_cli->room_id == room_id && tmp_cli->conn_fd != cli->conn_fd && tmp_cli->login_status == AUTH) {
+                int target_fd = (tmp_cli->async_conn_fd >= 0) ? tmp_cli->async_conn_fd : tmp_cli->conn_fd;
+                send(target_fd, &notice_msg, sizeof(Message), 0);
+                printf("[%d] Sent SYSTEM_NOTICE to %s: '%s'\n", cli->conn_fd, tmp_cli->login_account, leave_message);
+            }
+            tmp_cli = tmp_cli->next;
+        }
+        
+        // Nếu đang trong game, broadcast thêm thông tin chi tiết cho Match
+        if (game_in_progress && player_idx >= 0) {
+            char notify_json[BUFF_SIZE];
+            sprintf(notify_json, "{\"type\":\"PLAYER_LEFT\",\"username\":\"%s\"}", cli->login_account);
+            broadcast_match_json(m, notify_json, ROUND_INFO);
+            printf("[%d] Broadcasted PLAYER_LEFT notification for %s\n", cli->conn_fd, cli->login_account);
+            
+            // Nếu người rời đang trong lượt chơi Round 3, chuyển sang người tiếp theo
+            if (m->current_round == 3 && m->current_turn_index == player_idx) {
+                printf("[%d] Player left during their turn in Round 3, skipping to next\n", cli->conn_fd);
+                // Tìm người chơi tiếp theo còn lại
+                int next_idx = m->current_turn_index + 1;
+                while (next_idx < m->count_players && m->has_left[next_idx]) {
+                    next_idx++;
+                }
+                
+                if (next_idx < m->count_players) {
+                    m->current_turn_index = next_idx;
+                    char json_turn[BUFF_SIZE];
+                    sprintf(json_turn, "{\"type\":\"TURN_CHANGE\",\"next_user\":\"%s\"}", m->player_names[next_idx]);
+                    broadcast_match_json(m, json_turn, ROUND_INFO);
+                    printf("[%d] Changed turn to %s (idx=%d)\n", cli->conn_fd, m->player_names[next_idx], next_idx);
+                } else {
+                    // Tất cả người còn lại đã chơi xong, kết thúc vòng 3
+                    printf("[%d] All remaining players finished, ending Round 3\n", cli->conn_fd);
+                }
+            }
+        }
+    }
+    
+    // Cập nhật left_at TRƯỚC KHI đếm remaining_players
     sprintf(query, "UPDATE room_members SET left_at = NOW() WHERE room_id = %d AND user_id = %d", 
             room_id, user_id);
     mysql_query(g_db_conn, query);
+    printf("[%d] Updated left_at for user_id=%d in room %d\n", cli->conn_fd, user_id, room_id);
+    
+    // Đếm số người còn lại trong phòng (chưa leave)
+    sprintf(query, "SELECT COUNT(*) FROM room_members WHERE room_id = %d AND left_at IS NULL", room_id);
+    int remaining_players = 0;
+    if (mysql_query(g_db_conn, query) == 0) {
+        res = mysql_store_result(g_db_conn);
+        row = mysql_fetch_row(res);
+        if (row) remaining_players = atoi(row[0]);
+        mysql_free_result(res);
+    }
+    
+    printf("[%d] Remaining players in room %d: %d (after counting)\n", cli->conn_fd, room_id, remaining_players);
+    
+    // Nếu không còn ai, kết thúc game và đóng phòng
+    if (remaining_players == 0) {
+        printf("[%d] *** ALL PLAYERS LEFT - CLOSING ROOM %d ***\n", cli->conn_fd, room_id);
+        
+        if (game_in_progress) {
+            printf("[%d] Game in progress - ending match\n", cli->conn_fd);
+            // Kết thúc match hiện tại
+            sprintf(query, "UPDATE matches SET ended_at = NOW() WHERE room_id = %d AND ended_at IS NULL", room_id);
+            int update_result = mysql_query(g_db_conn, query);
+            printf("[%d] Match update result: %d\n", cli->conn_fd, update_result);
+            
+            // Xóa Match khỏi RAM
+            Match *prev_m = NULL, *curr_m = head_match;
+            while (curr_m) {
+                if (curr_m->room_id == room_id) {
+                    if (prev_m) prev_m->next = curr_m->next;
+                    else head_match = curr_m->next;
+                    free(curr_m);
+                    printf("[%d] Match removed from memory\n", cli->conn_fd);
+                    break;
+                }
+                prev_m = curr_m;
+                curr_m = curr_m->next;
+            }
+        }
+        
+        // Đóng phòng
+        sprintf(query, "UPDATE rooms SET status = 'CLOSED' WHERE room_id = %d", room_id);
+        int close_result = mysql_query(g_db_conn, query);
+        printf("[%d] *** ROOM %d CLOSED - SQL result: %d ***\n", cli->conn_fd, room_id, close_result);
+        
+        cli->room_id = 0;
+        cli->is_ready = 0;
+        pthread_mutex_unlock(&mutex);
+        return LEAVE_ROOM_SUCCESS;
+    }
+    
+    // Nếu chỉ còn 1 người và đang trong game, vẫn để họ chơi tiếp
+    if (remaining_players == 1 && game_in_progress) {
+        printf("[%d] Only 1 player remaining, game continues\n", cli->conn_fd);
+    }
     
     // Kiểm tra xem user có phải host không
     sprintf(query, "SELECT host_user_id FROM rooms WHERE room_id = %d", room_id);
@@ -1072,11 +1217,7 @@ int handle_leave_room(Client *cli)
                     
                     printf("[%d] Host left, transferred to user_id=%d\n", cli->conn_fd, new_host_id);
                 } else {
-                    // Không còn ai -> đóng phòng
                     mysql_free_result(res);
-                    sprintf(query, "UPDATE rooms SET status = 'CLOSED' WHERE room_id = %d", room_id);
-                    mysql_query(g_db_conn, query);
-                    printf("[%d] Host left, room closed\n", cli->conn_fd);
                 }
             }
         } else {
@@ -1084,6 +1225,7 @@ int handle_leave_room(Client *cli)
         }
     }
     
+    // Set room_id = 0 TRƯỚC KHI return để client không nhận UPDATE_ROOM_STATE
     cli->room_id = 0;
     cli->is_ready = 0;
     
@@ -1641,6 +1783,11 @@ void *game_round_handler(void *arg)
     int room_id = *((int *)arg);
     free(arg);
     
+    // Tạo Match struct trong RAM ngay từ khi bắt đầu game
+    pthread_mutex_lock(&mutex);
+    create_match_in_memory(room_id);
+    pthread_mutex_unlock(&mutex);
+    
     // Wait 1 second for clients to navigate to Round1Room and connect signals
     printf("Waiting 1 second for clients in room %d to be ready...\n", room_id);
     sleep(1);
@@ -1972,6 +2119,19 @@ int handle_answer_submit(Client *cli, char answer[])
         return SYSTEM_ERROR;
     }
     
+    // Cập nhật điểm vào Match struct (RAM)
+    Match *m = find_match(cli->room_id);
+    if (m != NULL) {
+        for (int i = 0; i < m->count_players; i++) {
+            if (m->player_ids[i] == user_id) {
+                m->r1_scores[i] += score_awarded;
+                printf("[Round1] Updated player %s score in Match: r1_scores[%d] = %d\n", 
+                       m->player_names[i], i, m->r1_scores[i]);
+                break;
+            }
+        }
+    }
+    
     pthread_mutex_unlock(&mutex);
     
     printf("[%d] Answer saved successfully\n", cli->conn_fd);
@@ -2003,20 +2163,20 @@ void broadcast_question_result(int room_id, int round_id)
         mysql_free_result(res);
     }
     
-    // Get all players' TOTAL cumulative scores (sum of all rounds in this match)
+    // Get all players' TOTAL cumulative scores (including those who left)
     sprintf(query, 
         "SELECT u.username, "
         "COALESCE((SELECT SUM(ra.score_awarded) "
         "          FROM rounds r2 "
         "          JOIN round_answers ra ON ra.round_id = r2.round_id "
         "          WHERE r2.match_id = m.match_id AND ra.user_id = u.user_id), 0) AS total_score, "
-        "COALESCE(ra_current.is_correct, 0) AS is_correct "
+        "COALESCE(ra_current.is_correct, 0) AS is_correct, "
+        "CASE WHEN rm.left_at IS NOT NULL THEN 1 ELSE 0 END AS has_left "
         "FROM room_members rm "
         "JOIN users u ON rm.user_id = u.user_id "
         "JOIN rounds r ON r.round_id = %d "
         "JOIN matches m ON r.match_id = m.match_id AND m.room_id = rm.room_id "
         "LEFT JOIN round_answers ra_current ON ra_current.round_id = r.round_id AND ra_current.user_id = u.user_id "
-        "WHERE rm.left_at IS NULL "
         "ORDER BY total_score DESC", round_id);
     
     char result_json[BUFF_SIZE] = "{\"correct\":\"";
@@ -2032,9 +2192,10 @@ void broadcast_question_result(int room_id, int round_id)
             if (!first) strcat(result_json, ",");
             first = 0;
             
+            int has_left = atoi(row[3]);
             char player_json[256];
-            sprintf(player_json, "{\"username\":\"%s\",\"score\":%s,\"is_correct\":%s}", 
-                    row[0], row[1], row[2]);
+            sprintf(player_json, "{\"username\":\"%s\",\"score\":%s,\"is_correct\":%s,\"left\":%s}", 
+                    row[0], row[1], row[2], has_left ? "true" : "false");
             strcat(result_json, player_json);
         }
         
@@ -2069,17 +2230,16 @@ void broadcast_final_ranking(int room_id, int match_id)
     // Do not lock here to avoid deadlock when caller already holds the mutex
     printf("[FINAL_RANKING] Broadcasting final ranking for match %d in room %d\n", match_id, room_id);
     
-    // Get total scores for all players in this match
+    // Get total scores for ALL players in this match (including those who left)
     char query[2048];
     sprintf(query, 
-        "SELECT u.username, SUM(COALESCE(ra.score_awarded, 0)) AS total_score "
+        "SELECT u.username, SUM(COALESCE(ra.score_awarded, 0)) AS total_score, rm.left_at "
         "FROM room_members rm "
         "JOIN users u ON rm.user_id = u.user_id "
         "JOIN matches m ON m.match_id = %d AND m.room_id = rm.room_id "
         "LEFT JOIN rounds r ON r.match_id = m.match_id "
         "LEFT JOIN round_answers ra ON ra.round_id = r.round_id AND ra.user_id = u.user_id "
-        "WHERE rm.left_at IS NULL "
-        "GROUP BY u.username "
+        "GROUP BY u.username, rm.left_at "
         "ORDER BY total_score DESC", match_id);
     
     printf("[FINAL_RANKING] SQL Query: %s\n", query);
@@ -2096,13 +2256,14 @@ void broadcast_final_ranking(int room_id, int match_id)
         
         while ((row = mysql_fetch_row(res)) != NULL) {
             player_count++;
-            printf("[FINAL_RANKING] Player %d: %s, Total Score: %s\n", rank, row[0], row[1]);
+            int has_left = (row[2] != NULL) ? 1 : 0;
+            printf("[FINAL_RANKING] Player %d: %s, Total Score: %s, Left: %d\n", rank, row[0], row[1], has_left);
             if (!first) strcat(result_json, ",");
             first = 0;
             
-            char player_json[256];
-            sprintf(player_json, "{\"rank\":%d,\"username\":\"%s\",\"total_score\":%s}", 
-                    rank++, row[0], row[1]);
+            char player_json[300];
+            sprintf(player_json, "{\"rank\":%d,\"username\":\"%s\",\"total_score\":%s,\"left\":%s}", 
+                    rank++, row[0], row[1], has_left ? "true" : "false");
             strcat(result_json, player_json);
         }
         
@@ -2405,6 +2566,19 @@ int handle_price_submit(Client *cli, char price_data[])
         return SYSTEM_ERROR;
     }
     
+    // Cập nhật điểm vào Match struct (RAM)
+    Match *m = find_match(cli->room_id);
+    if (m != NULL) {
+        for (int i = 0; i < m->count_players; i++) {
+            if (m->player_ids[i] == user_id) {
+                m->r2_scores[i] += score_awarded;
+                printf("[Round2] Updated player %s score in Match: r2_scores[%d] = %d\n", 
+                       m->player_names[i], i, m->r2_scores[i]);
+                break;
+            }
+        }
+    }
+    
     pthread_mutex_unlock(&mutex);
     
     printf("[%d] Price answer saved successfully\n", cli->conn_fd);
@@ -2445,7 +2619,7 @@ void broadcast_round2_result(int room_id, int round_id)
         mysql_free_result(res);
     }
     
-    // Get all players' cumulative scores (sum of ALL rounds in this match)
+    // Get all players' cumulative scores (including those who left)
     sprintf(query, 
         "SELECT u.username, "
         "COALESCE((SELECT SUM(ra.score_awarded) "
@@ -2453,13 +2627,13 @@ void broadcast_round2_result(int room_id, int round_id)
         "          JOIN round_answers ra ON ra.round_id = r2.round_id "
         "          WHERE r2.match_id = m.match_id AND ra.user_id = u.user_id), 0) AS total_score, "
         "COALESCE(ra_current.answer_price, 0) AS guessed_price, "
-        "COALESCE(ra_current.is_correct, 0) AS is_correct "
+        "COALESCE(ra_current.is_correct, 0) AS is_correct, "
+        "CASE WHEN rm.left_at IS NOT NULL THEN 1 ELSE 0 END AS has_left "
         "FROM room_members rm "
         "JOIN users u ON rm.user_id = u.user_id "
         "JOIN rounds r ON r.round_id = %d "
         "JOIN matches m ON r.match_id = m.match_id AND m.room_id = rm.room_id "
         "LEFT JOIN round_answers ra_current ON ra_current.round_id = r.round_id AND ra_current.user_id = u.user_id "
-        "WHERE rm.left_at IS NULL "
         "ORDER BY total_score DESC", round_id);
     
     char result_json[BUFF_SIZE];
@@ -2475,10 +2649,11 @@ void broadcast_round2_result(int room_id, int round_id)
             if (!first) strcat(result_json, ",");
             first = 0;
             
+            int has_left = atoi(row[4]);
             char player_json[512];
             sprintf(player_json, 
-                "{\"username\":\"%s\",\"score\":%s,\"guessed_price\":%s,\"is_correct\":%s}", 
-                row[0], row[1], row[2], row[3]);
+                "{\"username\":\"%s\",\"score\":%s,\"guessed_price\":%s,\"is_correct\":%s,\"left\":%s}", 
+                row[0], row[1], row[2], row[3], has_left ? "true" : "false");
             strcat(result_json, player_json);
         }
         
@@ -2514,6 +2689,15 @@ void start_round3(int room_id) {
         pthread_mutex_lock(&mutex);
         char query[1024];
         
+        // Cập nhật current_round trong Match
+        m->current_round = 3;
+        m->current_turn_index = 0;
+        
+        // Tìm người chơi đầu tiên chưa rời để bắt đầu lượt
+        while (m->current_turn_index < m->count_players && m->has_left[m->current_turn_index]) {
+            m->current_turn_index++;
+        }
+        
         // Step 1: Insert Round 3 record
         sprintf(query, "INSERT INTO rounds (match_id, round_number, round_type, started_at) "
                        "SELECT match_id, 3, 'V3', NOW() FROM matches WHERE room_id = %d AND ended_at IS NULL LIMIT 1", room_id);
@@ -2538,20 +2722,24 @@ void start_round3(int room_id) {
             mysql_free_result(res);
         }
         
-        // Insert initial round_answers for all players
+        // Insert initial round_answers for all players (bao gồm cả người đã rời)
         printf("[ROUND3] Initializing round_answers for %d players (round_id=%d)\n", m->count_players, round_id);
         for (int i = 0; i < m->count_players; i++) {
             sprintf(query, "INSERT INTO round_answers (round_id, user_id, answer_choice, score_awarded, answer_timestamp) "
                           "VALUES (%d, %d, '0', 0, NOW())", round_id, m->player_ids[i]);
             int res = mysql_query(g_db_conn, query);
-            printf("[ROUND3] Insert player %d (user_id=%d): %s\n", i, m->player_ids[i], (res==0)?"OK":"FAIL");
+            printf("[ROUND3] Insert player %d (user_id=%d, has_left=%d): %s\n", 
+                   i, m->player_ids[i], m->has_left[i], (res==0)?"OK":"FAIL");
         }
         
         pthread_mutex_unlock(&mutex);
 
-        char json[BUFF_SIZE];
-        sprintf(json, "{\"type\":\"ROUND_START\",\"round\":3,\"turn_user\":\"%s\"}", m->player_names[0]);
-        broadcast_match_json(m, json, GAME_START_NOTIFY); 
+        if (m->current_turn_index < m->count_players) {
+            char json[BUFF_SIZE];
+            sprintf(json, "{\"type\":\"ROUND_START\",\"round\":3,\"turn_user\":\"%s\"}", 
+                    m->player_names[m->current_turn_index]);
+            broadcast_match_json(m, json, GAME_START_NOTIFY);
+        }
     }
 }
 
@@ -2573,15 +2761,15 @@ void create_match_in_memory(int room_id) {
     Match *new_m = (Match *)malloc(sizeof(Match));
     new_m->room_id = room_id;
     new_m->count_players = 0;
-    // LƯU Ý: Để test Round 3, ta set = 3. Khi chạy thật hãy sửa thành = 1
-    new_m->current_round = 3; 
+    // Bắt đầu từ vòng 1
+    new_m->current_round = 1; 
     new_m->current_turn_index = 0;
     new_m->next = head_match;
     head_match = new_m;
 
-    // Load players from DB
-    char query[1024]; // Tăng buffer size để tránh warning
-    sprintf(query, "SELECT u.user_id, u.username FROM room_members rm JOIN users u ON rm.user_id = u.user_id WHERE rm.room_id = %d AND rm.left_at IS NULL ORDER BY rm.joined_at ASC", room_id);
+    // Load TẤT CẢ players from DB (kể cả người đã rời) theo thứ tự tham gia
+    char query[1024];
+    sprintf(query, "SELECT u.user_id, u.username, rm.left_at FROM room_members rm JOIN users u ON rm.user_id = u.user_id WHERE rm.room_id = %d ORDER BY rm.joined_at ASC", room_id);
     
     if (mysql_query(g_db_conn, query) == 0) {
         MYSQL_RES *res = mysql_store_result(g_db_conn);
@@ -2591,17 +2779,25 @@ void create_match_in_memory(int room_id) {
             new_m->player_ids[count] = atoi(row[0]);
             strcpy(new_m->player_names[count], row[1]);
             
-            // Init Round 3 data
+            // Init all rounds data
+            new_m->r1_scores[count] = 0;
+            new_m->r2_scores[count] = 0;
             new_m->r3_scores[count] = 0;
             new_m->r3_spins[count] = 0;
             new_m->r3_passed[count] = 0;
+            
+            // Kiểm tra xem người này đã rời chưa (left_at không NULL)
+            new_m->has_left[count] = (row[2] != NULL) ? 1 : 0;
+            
+            printf("[MATCH] Player %d: %s (user_id=%d, has_left=%d)\n", 
+                   count, new_m->player_names[count], new_m->player_ids[count], new_m->has_left[count]);
             
             count++;
         }
         new_m->count_players = count;
         mysql_free_result(res);
     }
-    printf("[MATCH] Match created in memory for Room %d with %d players. Round %d\n", room_id, new_m->count_players, new_m->current_round);
+    printf("[MATCH] Match created in memory for Room %d with %d players (including left players). Round %d\n", room_id, new_m->count_players, new_m->current_round);
 }
 // Broadcast JSON message to all players in a match
 void broadcast_match_json(Match *m, const char *json_data, int type) {
@@ -2689,7 +2885,12 @@ void handle_round_3_move(Client *cli, char *json_input) {
 
     // --- KIỂM TRA CHUYỂN LƯỢT / KẾT THÚC GAME ---
     if (turn_ended) {
+        // Tìm người chơi tiếp theo chưa rời
         m->current_turn_index++;
+        while (m->current_turn_index < m->count_players && m->has_left[m->current_turn_index]) {
+            printf("[Round3] Skipping player idx=%d (has_left)\n", m->current_turn_index);
+            m->current_turn_index++;
+        }
         
         if (m->current_turn_index >= m->count_players) {
             // TẤT CẢ ĐÃ XONG - XỬ LÝ KẾT THÚC MATCH
@@ -2707,7 +2908,7 @@ void handle_round_3_move(Client *cli, char *json_input) {
                 mysql_free_result(res);
             }
 
-            // BƯỚC 1: Vòng lặp tính toán điểm cuối cùng và cập nhật DB cho từng người
+            // BƯỚC 1: Vòng lặp tính toán điểm cuối cùng và cập nhật DB cho từng người (bao gồm cả người đã rời)
             for (int i=0; i<m->count_players; i++) {
                 int final_score = m->r3_scores[i];
                 if (final_score > 100) final_score -= 100; // Luật > 100
@@ -2719,15 +2920,20 @@ void handle_round_3_move(Client *cli, char *json_input) {
                         final_score, m->player_ids[i], current_match_id);
                 mysql_query(g_db_conn, update_score_q);
 
-                if (final_score > max_score) {
+                // Chỉ tính winner từ những người còn lại (chưa rời)
+                if (!m->has_left[i] && final_score > max_score) {
                     max_score = final_score;
                     strcpy(winner, m->player_names[i]);
                 }
 
-                char entry[100];
-                sprintf(entry, "{\"user\":\"%s\",\"score\":%d}", m->player_names[i], final_score);
+                // Thêm thông tin vào JSON, đánh dấu người đã rời
+                char entry[150];
+                sprintf(entry, "{\"user\":\"%s\",\"score\":%d,\"left\":%s}", 
+                       m->player_names[i], final_score, m->has_left[i] ? "true" : "false");
                 strcat(scores_json, entry);
                 if(i < m->count_players - 1) strcat(scores_json, ",");
+                
+                printf("[Round3] Player %s: score=%d, left=%d\n", m->player_names[i], final_score, m->has_left[i]);
             }
             strcat(scores_json, "]");
 

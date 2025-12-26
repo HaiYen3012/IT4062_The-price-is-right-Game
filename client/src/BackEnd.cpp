@@ -257,11 +257,18 @@ void BackEnd::leaveRoom()
 {
     qDebug() << "Leaving room...";
     
+    // Chỉ gửi request, không chờ response đồng bộ
+    // Response sẽ được xử lý qua handleMessageFromThread -> emit leaveRoomSuccess
     int result = leave_room();
     
-    if (result == LEAVE_ROOM_SUCCESS) {
-        qDebug() << "Left room successfully!";
+    if (result < 0) {
+        qDebug() << "Failed to send leave room request!";
+        // Vẫn emit success để client có thể quay về trang chủ
         emit leaveRoomSuccess();
+    } else {
+        qDebug() << "Leave room request sent, waiting for server response...";
+        // KHÔNG emit leaveRoomSuccess ở đây
+        // Sẽ emit khi nhận được LEAVE_ROOM_SUCCESS từ handleMessageFromThread
     }
 }
 
@@ -430,7 +437,11 @@ void BackEnd::handleMessageFromThread(int msgType, QString msgValue)
     QByteArray msgValueBytes = msgValue.toUtf8();
     const char* safe_value = msgValueBytes.constData();
     
-    if (msgType == INVITE_NOTIFY) {
+    if (msgType == LEAVE_ROOM_SUCCESS) {
+        qDebug() << "LEAVE_ROOM_SUCCESS received from server";
+        emit leaveRoomSuccess();
+    }
+    else if (msgType == INVITE_NOTIFY) {
         // Parse: invitation_id|from_username|room_code
         int invitation_id;
         char from_user[256], room_code[256];
@@ -584,6 +595,10 @@ void BackEnd::handleMessageFromThread(int msgType, QString msgValue)
     }
     else if (msgType == GAME_END) {
         emit gameEnd(msgValue);
+    }
+    else if (msgType == SYSTEM_NOTICE) {
+        qDebug() << "SYSTEM_NOTICE received:" << msgValue;
+        emit systemNotice(msgValue);
     }
 }
 

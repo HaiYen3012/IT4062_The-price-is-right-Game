@@ -82,6 +82,7 @@ signals:
     void gameEnd(QString rankingData);
     void gameStarted(QString data);
     void timerTick(int secondsRemaining);
+    void systemNotice(QString message);
 
 public slots:
     void handleMessageFromThread(int msgType, QString msgValue);
