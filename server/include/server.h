@@ -104,7 +104,13 @@ enum msg_type
   SPECTATE_JOIN,
   SPECTATE_JOIN_RESULT,
   SYSTEM_NOTICE,
-  SYSTEM_ERROR
+  SYSTEM_ERROR,
+  JOIN_AS_VIEWER,
+  JOIN_AS_VIEWER_SUCCESS,
+  JOIN_AS_VIEWER_FAIL,
+  VIEWER_STATE_UPDATE,
+  VIEWER_SYNC,
+  LEAVE_VIEWER
 };
 
 enum login_status
@@ -131,6 +137,7 @@ typedef struct _client
   int login_status; // UN_AUTH or AUTH
   int room_id;      // current room (0 if not in room)
   int is_ready;     // ready status in room (0 or 1)
+  int is_viewer;    // 1 if viewing a room, 0 if playing
   struct _client *next;
 } Client;
 
@@ -185,6 +192,10 @@ int handle_kick_user(Client *cli, char target_username[BUFF_SIZE]);
 int handle_start_game(Client *cli);
 void broadcast_room_state(int room_id);
 void send_invite_notification(int to_user_id, int from_user_id, int room_id, int invitation_id);
+int handle_join_as_viewer(Client *cli, char room_code[BUFF_SIZE]);
+int handle_leave_viewer(Client *cli);
+void send_viewer_state(Client *cli);
+void send_game_state_sync(Client *cli, int room_id);
 
 // Round 1 game functions
 void *game_round_handler(void *arg);

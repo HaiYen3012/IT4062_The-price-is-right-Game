@@ -35,7 +35,8 @@ Page {
             for (var i = 0; i < json.length; i++) {
                 roomsList.model.append({
                     room_code: json[i].room_code,
-                    players: json[i].players
+                    players: json[i].players,
+                    status: json[i].status || "LOBBY"
                 });
             }
         } catch (e) {
@@ -88,6 +89,83 @@ Page {
         
         function onRoomFull() {
             notifyErrorPopup.popMessage = "Room is full!"
+            notifyErrorPopup.open()
+        }
+        
+        function onJoinAsViewerSuccess() {
+            console.log("Viewer join success, waiting for VIEWER_SYNC...");
+            // Don't navigate yet, wait for viewerSync signal with game state
+        }
+        
+        function onViewerSync(syncData) {
+            console.log("Received VIEWER_SYNC:", syncData);
+            roomListPopup.close();
+            
+            try {
+                var data = JSON.parse(syncData);
+                var roundType = data.round_type || "UNKNOWN";
+                var currentRound = data.round || 1;
+                
+                console.log("Sync data - Round:", currentRound, "Type:", roundType);
+                
+                if (roundType === "ROUND1") {
+                    // Navigate to ViewerRound1Room with synced data
+                    stackView.push("qrc:/qml/ViewerRound1Room.qml", {
+                        backend: backend,
+                        roomCode: pendingRoomCode,
+                        syncData: syncData
+                    });
+                } else if (roundType === "V1" || roundType === "V2" || roundType === "V4") {
+                    // Round 2 (V1/V2/V4)
+                    stackView.push("qrc:/qml/ViewerRound2Room.qml", {
+                        backend: backend,
+                        roomCode: pendingRoomCode,
+                        round2Id: data.round_id || 0,
+                        productName: data.product_name || "",
+                        productDesc: data.product_desc || "",
+                        productImage: data.product_image || "",
+                        thresholdPct: data.threshold || 0,
+                        timeRemaining: data.time_limit || 30,
+                        actualPrice: data.product_price || 0,
+                        playerScores: data.players || []
+                    });
+                } else if (roundType === "V3") {
+                    // Round 3 - use Round3Room with viewer mode
+                    stackView.push("qrc:/qml/Round3Room.qml", {
+                        backend: backend,
+                        isViewerMode: true
+                    });
+                } else if (roundType === "RANKING") {
+                    // Currently in ranking page between rounds
+                    console.log("Joined during ranking, showing RankingPage");
+                    stackView.push("qrc:/qml/RankingPage.qml", {
+                        backend: backend,
+                        rankings: data.players || [],
+                        roundNumber: currentRound,
+                        isFinalRanking: false,
+                        isViewer: true,
+                        roomCode: pendingRoomCode
+                    });
+                } else {
+                    // Unknown - fallback to Round1
+                    console.warn("Unknown round type:", roundType);
+                    stackView.push("qrc:/qml/ViewerRound1Room.qml", {
+                        backend: backend,
+                        roomCode: pendingRoomCode
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to parse VIEWER_SYNC:", e);
+                // Fallback to Round1
+                stackView.push("qrc:/qml/ViewerRound1Room.qml", {
+                    backend: backend,
+                    roomCode: pendingRoomCode
+                });
+            }
+        }
+        
+        function onJoinAsViewerFail() {
+            notifyErrorPopup.popMessage = "Cannot view this room!"
             notifyErrorPopup.open()
         }
     }
@@ -359,13 +437,40 @@ Page {
 
                         Column {
                             spacing: 6
-                            Text { text: room_code; color: "white"; font.pixelSize: 22; font.bold: true }
-                            Text { text: players; color: "#E8F5E9"; font.pixelSize: 18 }
+                            Text { 
+                                text: room_code
+                                color: "white"
+                                font.pixelSize: 22
+                                font.bold: true
+                            }
+                            Row {
+                                spacing: 8
+                                Text { 
+                                    text: players
+                                    color: "#E8F5E9"
+                                    font.pixelSize: 18
+                                }
+                                Rectangle {
+                                    visible: status === "PLAYING"
+                                    width: 70
+                                    height: 24
+                                    radius: 12
+                                    color: "#4CAF50"
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "PLAYING"
+                                        color: "white"
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                    }
+                                }
+                            }
                         }
 
                         Item { Layout.fillWidth: true }
 
                         Rectangle {
+                            visible: status === "LOBBY"
                             width: 100; height: 50
                             radius: 25
                             color: "#FFCA28"
@@ -380,6 +485,26 @@ Page {
                                     pendingRoomCode = room_code
                                     if (backend) {
                                         backend.joinRoom(room_code)
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Rectangle {
+                            visible: status === "PLAYING"
+                            width: 100; height: 50
+                            radius: 25
+                            color: "#29B6F6"
+                            border.width: 4
+                            border.color: "#0277BD"
+                            Text { anchors.centerIn: parent; text: "VIEW"; color: "white"; font.pixelSize: 20; font.bold: true }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    pendingRoomCode = room_code
+                                    if (backend) {
+                                        backend.joinAsViewer(room_code)
                                     }
                                 }
                             }
@@ -401,7 +526,8 @@ Page {
                                 for (var i = 0; i < json.length; i++) {
                                     roomsList.model.append({
                                         room_code: json[i].room_code,
-                                        players: json[i].players
+                                        players: json[i].players,
+                                        status: json[i].status || "LOBBY"
                                     })
                                 }
                             }

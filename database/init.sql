@@ -33,18 +33,19 @@ CREATE TABLE rooms (
 );
 
 CREATE TABLE room_members (
+    member_id  INT AUTO_INCREMENT PRIMARY KEY,
     room_id    INT NOT NULL,
     user_id    INT NOT NULL,
     role       ENUM('PLAYER','SPECTATOR') NOT NULL DEFAULT 'PLAYER',
     joined_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     left_at    DATETIME NULL,
-    PRIMARY KEY (room_id, user_id),
     CONSTRAINT fk_room_members_room
         FOREIGN KEY (room_id) REFERENCES rooms(room_id)
         ON DELETE CASCADE,
     CONSTRAINT fk_room_members_user
         FOREIGN KEY (user_id) REFERENCES users(user_id)
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+    INDEX idx_room_user (room_id, user_id, left_at)
 );
 
 CREATE TABLE invitations (

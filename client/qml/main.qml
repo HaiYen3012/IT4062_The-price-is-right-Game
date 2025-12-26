@@ -103,7 +103,7 @@ ApplicationWindow {
                             prodDesc: gameData.product_desc
                         })
                     } else if (gameData.round === 3) {
-                        stackView.replace("qrc:/qml/Room3.qml", { 
+                        stackView.replace("qrc:/qml/Round3Room.qml", { 
                             backend: backEnd,
                             turnUser: gameData.turn_user 
                         })

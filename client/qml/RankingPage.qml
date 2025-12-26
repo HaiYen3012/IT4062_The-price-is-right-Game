@@ -11,6 +11,8 @@ Page {
     property var rankings: []
     property int roundNumber: 1  // Round number (1, 2, 3, ...)
     property bool isFinalRanking: false  // True only for Round 3 total ranking
+    property bool isViewer: false  // True if viewer mode
+    property string roomCode: ""  // Room code for viewer
 
     // Prevent multiple navigations when auto-returning to waiting room
     property bool navigatedBack: false
@@ -20,7 +22,13 @@ Page {
         interval: 9000  // Let players view final ranking a bit longer, then auto-return
         running: isFinalRanking
         repeat: false
-        onTriggered: navigateBackToWaitingRoom()
+        onTriggered: {
+            if (isViewer) {
+                leaveRoomAndReturnHome();  // Viewer về trang chủ
+            } else {
+                navigateBackToWaitingRoom();  // Player về phòng chờ
+            }
+        }
     }
     
     onRankingsChanged: {
@@ -32,11 +40,13 @@ Page {
         console.log("=== RankingPage onCompleted ===");
         console.log("RankingPage loaded with", rankings.length, "players, after Round", roundNumber);
         console.log("Rankings data:", JSON.stringify(rankings));
+        console.log("Viewer mode:", isViewer);
         
         // Kết nối signal để tự động chuyển sang Round tiếp theo khi server gửi ROUND_START
         if (backend) {
             backend.roundStart.connect(handleRoundStart);
-            console.log("RankingPage: Connected to roundStart signal");
+            backend.gameStarted.connect(handleGameStartNotify);
+            console.log("RankingPage: Connected to roundStart and gameStarted signals");
         }
 
         if (isFinalRanking) {
@@ -51,28 +61,74 @@ Page {
         // Ngắt kết nối khi thoát để tránh duplicate connections
         if (backend) {
             backend.roundStart.disconnect(handleRoundStart);
+            backend.gameStarted.disconnect(handleGameStartNotify);
         }
     }
     
     // Handler để chuyển sang Round 2 khi nhận ROUND_START từ server
     function handleRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit, imageUrl) {
-        console.log("=== RankingPage: ROUND_START received - Switching to Round2Room ===");
+        console.log("=== RankingPage: ROUND_START received - Switching to Round2 ===");
         console.log("Round:", roundId, "Type:", roundType);
         console.log("Product:", prodName, "Desc:", prodDesc);
         console.log("Threshold:", threshold, "% Time:", timeLimit, "s");
         console.log("Image URL:", imageUrl);
+        console.log("Viewer mode:", isViewer);
         
-        // Chuyển sang Round2Room với đầy đủ parameters
-        stackView.push("qrc:/qml/Round2Room.qml", {
-            backend: backend,
-            roundId: roundId,
-            roundType: roundType,
-            prodName: prodName,
-            prodDesc: prodDesc,
-            threshold: threshold,
-            timeLimit_: timeLimit,
-            productImage: imageUrl
-        });
+        if (isViewer) {
+            // Viewer: Chuyển sang ViewerRound2Room với đầy đủ parameters
+            stackView.push("qrc:/qml/ViewerRound2Room.qml", {
+                backend: backend,
+                roomCode: roomCode,
+                round2Id: roundId,
+                productName: prodName,
+                productDesc: prodDesc,
+                productImage: imageUrl,
+                thresholdPct: threshold,
+                timeRemaining: timeLimit
+            });
+        } else {
+            // Player: Chuyển sang Round2Room với đầy đủ parameters
+            stackView.push("qrc:/qml/Round2Room.qml", {
+                backend: backend,
+                roundId: roundId,
+                roundType: roundType,
+                prodName: prodName,
+                prodDesc: prodDesc,
+                threshold: threshold,
+                timeLimit_: timeLimit,
+                productImage: imageUrl
+            });
+        }
+    }
+    
+    // Handler để chuyển sang Round 3 khi nhận GAME_START_NOTIFY
+    function handleGameStartNotify(data) {
+        console.log("=== RankingPage: GAME_STARTED received ===");
+        console.log("Data:", data);
+        console.log("Viewer mode:", isViewer);
+        console.log("Round number:", roundNumber);
+        
+        try {
+            var info = JSON.parse(data);
+            if (info.round === 3) {
+                if (isViewer) {
+                    // Viewer: Sử dụng Round3Room với overlay viewer mode
+                    console.log("Switching viewer to Round3Room (viewer mode)");
+                    stackView.replace("qrc:/qml/Round3Room.qml", {
+                        backend: backend,
+                        isViewerMode: true
+                    });
+                } else {
+                    // Player: Chuyển sang Round3Room
+                    console.log("Switching player to Round3Room");
+                    stackView.replace("qrc:/qml/Round3Room.qml", {
+                        backend: backend
+                    });
+                }
+            }
+        } catch (e) {
+            console.error("[RankingPage] Failed to parse gameStarted:", e);
+        }
     }
 
     function navigateBackToWaitingRoom() {

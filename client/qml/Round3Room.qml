@@ -21,6 +21,7 @@ Page {
     property int shuffleMax: 25
     
     property string myUserName: backend ? backend.user_name : ""
+    property bool isViewerMode: false  // For viewers watching the game
     
     // Biến đếm lượt quay (0, 1, 2)
     property int currentTurnSpins: 0 
@@ -197,7 +198,8 @@ Page {
                             backend: backend,
                             rankings: finalRankings,
                             roundNumber: 3,
-                            isFinalRanking: true
+                            isFinalRanking: true,
+                            isViewer: isViewerMode
                         });
                         finalRankingPushed = true;
                     }
@@ -565,7 +567,9 @@ Page {
                     text: spinning ? "SPINNING..." : (currentTurnSpins === 0 ? "SPIN 1" : "SPIN 2")
                     
                     // Logic tự động: Chỉ cần khai báo ở đây, KHÔNG can thiệp thủ công
-                    enabled: parent.isMyTurn && !spinning && backend !== null && currentTurnSpins < 2
+                    // Disable buttons in viewer mode
+                    enabled: !isViewerMode && parent.isMyTurn && !spinning && backend !== null && currentTurnSpins < 2
+                    visible: !isViewerMode  // Hide button for viewers
                     
                     background: Rectangle {
                         radius: 12
@@ -615,7 +619,8 @@ Page {
                     width: 120
                     height: 50
                     
-                    enabled: parent.isMyTurn && !spinning && backend !== null && currentTurnSpins >= 1
+                    enabled: !isViewerMode && parent.isMyTurn && !spinning && backend !== null && currentTurnSpins >= 1
+                    visible: !isViewerMode  // Hide button for viewers
                     
                     background: Rectangle {
                         radius: 12
@@ -662,6 +667,9 @@ Page {
             Text {
                 id: infoText
                 text: {
+                    if (isViewerMode) {
+                        return "🎬 VIEWER MODE - Đang xem ván đấu"
+                    }
                     if (playersModel.count > currentPlayerIndex) {
                         var curr = playersModel.get(currentPlayerIndex).name
                         if (curr === myUserName) return "Lượt của BẠN! Hãy quay số."
@@ -670,7 +678,11 @@ Page {
                     return "Waiting..."
                 }
                 anchors.horizontalCenter: parent.horizontalCenter
-                color: (infoText.text.indexOf("BẠN") !== -1) ? "#D32F2F" : "#043B56"
+                color: {
+                    if (isViewerMode) return "#9333EA"
+                    if (infoText.text.indexOf("BẠN") !== -1) return "#D32F2F"
+                    return "#043B56"
+                }
                 font.pixelSize: 16
                 font.bold: true
             }
@@ -753,7 +765,8 @@ Page {
                     backend: backend,
                     rankings: rankingsCopy,
                     roundNumber: 3,
-                    isFinalRanking: true
+                    isFinalRanking: true,
+                    isViewer: isViewerMode
                 });
                 finalRankingPushed = true;
             } else if (!finalRankings) {

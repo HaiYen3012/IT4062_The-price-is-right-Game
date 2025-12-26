@@ -600,6 +600,14 @@ void BackEnd::handleMessageFromThread(int msgType, QString msgValue)
         qDebug() << "SYSTEM_NOTICE received:" << msgValue;
         emit systemNotice(msgValue);
     }
+    else if (msgType == VIEWER_STATE_UPDATE) {
+        qDebug() << "VIEWER_STATE_UPDATE received:" << msgValue;
+        emit viewerStateUpdate(msgValue);
+    }
+    else if (msgType == VIEWER_SYNC) {
+        qDebug() << "VIEWER_SYNC received:" << msgValue;
+        emit viewerSync(msgValue);
+    }
 }
 
 void BackEnd::startCountdown(int seconds)
@@ -635,5 +643,31 @@ void BackEnd::onTimerTimeout()
     } else {
         m_globalTimer->stop();
         qDebug() << "Timer finished";
+    }
+}
+
+void BackEnd::joinAsViewer(QString roomCode)
+{
+    qDebug() << "Joining as viewer:" << roomCode;
+    QByteArray roomCodeBytes = roomCode.toUtf8();
+    int result = join_as_viewer(roomCodeBytes.data());
+    
+    if (result == JOIN_AS_VIEWER_SUCCESS) {
+        qDebug() << "Join as viewer success";
+        emit joinAsViewerSuccess();
+    } else {
+        qDebug() << "Join as viewer failed";
+        emit joinAsViewerFail();
+    }
+}
+
+void BackEnd::leaveViewer()
+{
+    qDebug() << "Leaving viewer mode";
+    int result = leave_viewer();
+    
+    if (result == LEAVE_ROOM_SUCCESS) {
+        qDebug() << "Leave viewer success";
+        emit leaveRoomSuccess();
     }
 }

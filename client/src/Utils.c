@@ -435,6 +435,51 @@ int submit_price(int round_id, int guessed_price)
   return PRICE_SUBMIT;
 }
 
+// ==================== VIEWER FUNCTIONS ====================
+
+int join_as_viewer(char room_code[])
+{
+  Message msg, response;
+  msg.type = JOIN_AS_VIEWER;
+  strcpy(msg.data_type, "string");
+  strncpy(msg.value, room_code, BUFF_SIZE - 1);
+  msg.value[BUFF_SIZE - 1] = '\0';
+  msg.length = strlen(msg.value);
+  
+  if (send(sockfd, &msg, sizeof(Message), 0) < 0) {
+    printf("Send JOIN_AS_VIEWER failed\n");
+    return -1;
+  }
+  
+  if (recv(sockfd, &response, sizeof(Message), 0) < 0) {
+    printf("Receive JOIN_AS_VIEWER response failed\n");
+    return -1;
+  }
+  
+  return response.type;
+}
+
+int leave_viewer()
+{
+  Message msg, response;
+  msg.type = LEAVE_VIEWER;
+  strcpy(msg.data_type, "string");
+  msg.value[0] = '\0';
+  msg.length = 0;
+  
+  if (send(sockfd, &msg, sizeof(Message), 0) < 0) {
+    printf("Send LEAVE_VIEWER failed\n");
+    return -1;
+  }
+  
+  if (recv(sockfd, &response, sizeof(Message), 0) < 0) {
+    printf("Receive LEAVE_VIEWER response failed\n");
+    return -1;
+  }
+  
+  return response.type;
+}
+
 // ==================== MESSAGE LISTENER ====================
 
 // Message listener thread - uses async_sockfd

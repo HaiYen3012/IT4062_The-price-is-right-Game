@@ -9,9 +9,12 @@
         <file alias="qml/KickConfirmPopup.qml">../qml/KickConfirmPopup.qml</file>
         <file alias="qml/Round1Room.qml">../qml/Round1Room.qml</file>
         <file alias="qml/Round2Room.qml">../qml/Round2Room.qml</file>
-        <file alias="qml/Room3.qml">../qml/Room3.qml</file>
+        <file alias="qml/Round3Room.qml">../qml/Round3Room.qml</file>
         <file alias="qml/RankingPage.qml">../qml/RankingPage.qml</file>
         <file alias="qml/SystemNoticePopup.qml">../qml/SystemNoticePopup.qml</file>
+        <file alias="qml/ViewerRound1Room.qml">../qml/ViewerRound1Room.qml</file>
+        <file alias="qml/ViewerRound2Room.qml">../qml/ViewerRound2Room.qml</file>
+        <file alias="qml/ViewerRound3Room.qml">../qml/ViewerRound3Room.qml</file>
 
         <!-- Sửa 2 dòng này -->
         <file alias="ui/pic.png">../ui/pic.png</file>

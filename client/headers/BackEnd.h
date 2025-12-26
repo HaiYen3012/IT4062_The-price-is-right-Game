@@ -47,6 +47,8 @@ public:
     Q_INVOKABLE void sendRoundAnswer(QString answer);
     Q_INVOKABLE void startCountdown(int seconds);
     Q_INVOKABLE void stopCountdown();
+    Q_INVOKABLE void joinAsViewer(QString roomCode);
+    Q_INVOKABLE void leaveViewer();
 
 signals:
     void userNameChanged();
@@ -83,6 +85,10 @@ signals:
     void gameStarted(QString data);
     void timerTick(int secondsRemaining);
     void systemNotice(QString message);
+    void joinAsViewerSuccess();
+    void joinAsViewerFail();
+    void viewerStateUpdate(QString data);
+    void viewerSync(QString syncData);
 
 public slots:
     void handleMessageFromThread(int msgType, QString msgValue);
