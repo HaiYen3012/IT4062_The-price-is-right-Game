@@ -193,10 +193,21 @@ Page {
             
             backend.startGameSuccess.connect(function() {
                 console.log("=== GAME STARTED SIGNAL RECEIVED (WAITING ROOM) ===")
-                //console.log("Current user:", backend.user_name)
-                //console.log("Navigating to Round1Room...")
-                // Navigate to Round 1 game screen
-                //stackView.push("qrc:/qml/Round1Room.qml", { backend: backend })
+                // Chờ QUESTION_START để navigate
+            })
+            
+            backend.questionStart.connect(function(roundId, question, optA, optB, optC, optD) {
+                console.log("=== QUESTION_START RECEIVED - Navigating to Round1Room ===")
+                console.log("Round ID:", roundId)
+                stackView.replace("qrc:/qml/Round1Room.qml", { 
+                    backend: backend,
+                    roundId: roundId,
+                    questionText: question,
+                    optionA: optA,
+                    optionB: optB,
+                    optionC: optC,
+                    optionD: optD
+                })
             })
             
             backend.startGameFail.connect(function() {
@@ -787,5 +798,17 @@ Page {
     KickConfirmPopup {
         id: kickConfirmPopup
         backend: waitingRoom.backend
+    }
+    
+    // System Notice Popup
+    SystemNoticePopup {
+        id: systemNoticePopup
+    }
+    
+    Connections {
+        target: backend
+        function onSystemNotice(message) {
+            systemNoticePopup.show(message)
+        }
     }
 }

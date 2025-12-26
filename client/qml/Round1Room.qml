@@ -281,6 +281,34 @@ Page {
         function onTimerTick(secondsRemaining) {
             timeRemaining = secondsRemaining;
         }
+        
+        function onLeaveRoomSuccess() {
+            console.log("Round1Room - Leave room successful, returning to home");
+            if (backend) {
+                backend.stopCountdown();
+            }
+            stackView.replace("qrc:/qml/HomeUser.qml", {backend: backend});
+        }
+        
+        function onUpdateRoomState(data) {
+            console.log("Round1Room - onUpdateRoomState:", data);
+            try {
+                var info = JSON.parse(data);
+                if (info.members) {
+                    var memberNames = info.members.split('|');
+                    console.log("Updated members count:", memberNames.length);
+                    
+                    // Nếu không còn ai, quay về trang chủ
+                    if (memberNames.length === 0) {
+                        console.log("All players left, returning to home");
+                        if (backend) backend.stopCountdown();
+                        stackView.replace("qrc:/qml/HomeUser.qml", {backend: backend});
+                    }
+                }
+            } catch (e) {
+                console.error("Round1Room - Failed to parse UPDATE_ROOM_STATE:", e);
+            }
+        }
     }
     
     // Background - vibrant game show style
@@ -989,6 +1017,18 @@ Page {
                     }
                 }
             }
+        }
+    }
+    
+    // System Notice Popup
+    SystemNoticePopup {
+        id: systemNoticePopup
+    }
+    
+    Connections {
+        target: backend
+        function onSystemNotice(message) {
+            systemNoticePopup.show(message)
         }
     }
 }
