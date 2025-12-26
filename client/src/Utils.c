@@ -193,7 +193,21 @@ int logout()
     printf("Send failed");
     return -1;
   }
-  return msg.type;
+  
+  // Wait for server response
+  if (recv(sockfd, &msg, sizeof(Message), 0) < 0)
+  {
+    printf("Receive failed");
+    return -1;
+  }
+  
+  if (msg.type == LOGOUT_SUCCESS)
+  {
+    printf("Logout successful\n");
+    return msg.type;
+  }
+  
+  return -1;
 }
 
 int get_rooms(char buffer[], int bufsize)
@@ -451,7 +465,7 @@ void *message_listener_thread(void *arg)
     
     if (g_message_callback)
     {
-      g_message_callback(msg);
+      g_message_callback(&msg);
     }
   }
   

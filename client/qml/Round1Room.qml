@@ -124,41 +124,51 @@ Page {
     
     Component.onCompleted: {
         console.log("Round1Room loaded, backend:", backend);
-        if (backend) {
-            backend.questionStart.connect(handleQuestionStart);
-            backend.questionResult.connect(handleQuestionResult);
-            backend.roundStart.connect(handleRoundStart);
-            backend.gameEnd.connect(handleGameEnd);
-            console.log("Round1Room signals connected");
-        } else {
+        if (!backend) {
             console.error("Backend is null!");
         }
     }
     
-    function handleGameEnd(rankingData) {
-        console.log("Game ended, showing ranking:", rankingData);
-        try {
-            var data = JSON.parse(rankingData);
-            stackView.push("qrc:/qml/RankingPage.qml", { 
-                backend: backend,
-                rankings: data.players,
-                roundNumber: 1  // Round 1 ranking
-            });
-        } catch (e) {
-            console.error("Failed to parse ranking data:", e);
+    Component.onDestruction: {
+        // Stop timer when page is destroyed
+        if (backend) {
+            backend.stopCountdown();
+            console.log("Round1Room destroyed, timer stopped");
         }
     }
     
-    // Handler để chuyển sang Round 2 khi nhận ROUND_START từ server
-    function handleRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit) {
-        console.log("=== ROUND_START received - Switching to Round2Room ===");
-        console.log("Round:", roundId, "Type:", roundType);
-        console.log("Product:", prodName);
-        
-        // Chuyển sang Round2Room
-        stackView.push("qrc:/qml/Round2Room.qml", {
-            backend: backend
-        });
+    function handleGameEnd(rankingData) {
+        console.log("=== GAME END received in Round1Room ===");
+        console.log("Ranking data:", rankingData);
+        try {
+            var data = JSON.parse(rankingData);
+            var players = data.players || [];
+            console.log("Parsed ranking, players count:", players.length);
+            console.log("Ranking data:", JSON.stringify(players));
+            
+            // Thêm rank vào dữ liệu
+            var sortedPlayers = players.slice().sort(function(a, b) {
+                return (b.score || 0) - (a.score || 0);
+            });
+            for (var i = 0; i < sortedPlayers.length; i++) {
+                sortedPlayers[i].rank = i + 1;
+            }
+            console.log("Ranked players:", JSON.stringify(sortedPlayers));
+            
+            // Stop timer
+            if (backend) {
+                backend.stopCountdown();
+            }
+            
+            // Replace to RankingPage - clear navigation history
+            stackView.replace("qrc:/qml/RankingPage.qml", { 
+                backend: backend,
+                rankings: sortedPlayers,
+                roundNumber: 1
+            });
+        } catch (e) {
+            console.error("Round1Room - Failed to parse GAME_END data:", e);
+        }
     }
     
     function handleQuestionStart(roundId, question, optA, optB, optC, optD) {
@@ -171,7 +181,9 @@ Page {
         console.log("Option D:", optD);
         
         // Stop timer first
-        countdownTimer.running = false;
+        if (backend) {
+            backend.stopCountdown();
+        }
         
         // Set resetting flag to prevent multiple color updates
         isResetting = true;
@@ -201,8 +213,10 @@ Page {
         console.log("After assignment - optionA:", round1Room.optionA);
         console.log("After assignment - optionC:", round1Room.optionC);
         
-        // Start countdown timer after everything is set
-        countdownTimer.running = true;
+        // Start countdown timer from C++ backend
+        if (backend) {
+            backend.startCountdown(15);
+        }
     }
     
     function handleQuestionResult(resultData) {
@@ -211,7 +225,9 @@ Page {
             var result = JSON.parse(resultData);
             
             // Stop timer
-            countdownTimer.running = false;
+            if (backend) {
+                backend.stopCountdown();
+            }
             
             // Set resetting flag to batch updates
             isResetting = true;
@@ -245,18 +261,25 @@ Page {
         }
     }
     
-    Timer {
-        id: countdownTimer
-        interval: 1000
-        running: false
-        repeat: true
-        onTriggered: {
-            if (timeRemaining > 0) {
-                timeRemaining--;
-                console.log("Time remaining:", timeRemaining);
-            } else {
-                running = false;
-            }
+    // Use Connections instead of .connect() to prevent accumulation
+    Connections {
+        target: backend
+        enabled: round1Room.StackView.status === StackView.Active
+        
+        function onQuestionStart(roundId, question, optA, optB, optC, optD) {
+            handleQuestionStart(roundId, question, optA, optB, optC, optD);
+        }
+        
+        function onQuestionResult(resultData) {
+            handleQuestionResult(resultData);
+        }
+        
+        function onGameEnd(rankingData) {
+            handleGameEnd(rankingData);
+        }
+        
+        function onTimerTick(secondsRemaining) {
+            timeRemaining = secondsRemaining;
         }
     }
     

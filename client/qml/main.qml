@@ -31,11 +31,15 @@ ApplicationWindow {
         onConnectSuccess: {
             rootWindow.connectionFailed = false
             waitPopup.close()
-            stackView.push("qrc:/qml/HomeGuest.qml")
+            // Truyền backend sang trang tiếp theo
+            stackView.push("qrc:/qml/HomeGuest.qml", { backend: backEnd })
         }
 
         onConnectFail: {
             rootWindow.connectionFailed = true
+            waitPopup.close()
+            notifyErrorPopup.popMessage = "Kết nối thất bại!"
+            notifyErrorPopup.open()
         }
 
         onSignupSuccess: {
@@ -50,17 +54,15 @@ ApplicationWindow {
         onLoginSuccess: {
             waitPopup.close()
             rootWindow.loginStatus = "LOGIN_SUCCESS"
-            notifySuccessPopup.popMessage = "Login successful! Welcome " + backEnd.user_name
+            notifySuccessPopup.popMessage = "Chào mừng " + backEnd.user_name
             notifySuccessPopup.open()
-            // Navigate to HomeUser.qml with username property and backend reference
             stackView.push("qrc:/qml/HomeUser.qml", { userName: backEnd.user_name, backend: backEnd })
         }
 
-        onAccountNotExist: {
-            waitPopup.close()
-            rootWindow.loginStatus = "ACCOUNT_NOT_EXIST"
-            notifyErrorPopup.popMessage = "Account does not exist!"
-            notifyErrorPopup.open()
+        onAccountNotExist: { 
+            waitPopup.close(); 
+            notifyErrorPopup.popMessage = "Tài khoản không tồn tại!"; 
+            notifyErrorPopup.open() 
         }
 
         onWrongPassword: {
@@ -82,6 +84,53 @@ ApplicationWindow {
             rootWindow.loginStatus = "ACCOUNT_BLOCKED"
             notifyErrorPopup.popMessage = "Your account has been blocked!"
             notifyErrorPopup.open()
+        }
+        onGameStarted: {
+            console.log("Điều hướng game: " + data)
+            if (data === "Game is starting!") {
+                stackView.replace("qrc:/qml/Round1Room.qml", { backend: backEnd })
+                return
+            }
+            try {
+                var gameData = JSON.parse(data)
+                if (gameData.type === "ROUND_START") {
+                    if (gameData.round === 2) {
+                        stackView.replace("qrc:/qml/Round2Room.qml", { 
+                            backend: backEnd,
+                            roundId: gameData.round_id,
+                            prodName: gameData.product_name,
+                            prodDesc: gameData.product_desc
+                        })
+                    } else if (gameData.round === 3) {
+                        stackView.replace("qrc:/qml/Room3.qml", { 
+                            backend: backEnd,
+                            turnUser: gameData.turn_user 
+                        })
+                    }
+                }
+            } catch (e) {
+                stackView.replace("qrc:/qml/Round1Room.qml", { backend: backEnd })
+            }
+        }
+
+        // FINAL RANKING - Only when game completely ends (after Round 3)
+        onGameEnd: { 
+            console.log("[main.qml] Game ended, final ranking data: " + data)
+            // NOTE: This should only be called at the very end of game (Round 3 end)
+            // Individual rounds handle their own rankings via Room*.qml files
+            // This is a fallback handler
+        }
+    }
+
+    // Global Connections for system-wide signals (prevents signal accumulation)
+    Connections {
+        target: backEnd
+        
+        function onInviteNotify(invitationId, fromUser, roomCode) {
+            globalInvitePopup.invitationId = invitationId
+            globalInvitePopup.fromUser = fromUser
+            globalInvitePopup.roomCode = roomCode
+            globalInvitePopup.open()
         }
     }
 
@@ -246,6 +295,109 @@ ApplicationWindow {
         }
 
         onOpened: waitPopupTimer.start()
+    }
+
+    // Global Invitation Popup (handles invites from anywhere in the app)
+    Dialog {
+        id: globalInvitePopup
+        anchors.centerIn: parent
+        width: 400
+        height: 250
+        modal: true
+        title: "Room Invitation"
+        
+        property int invitationId: 0
+        property string fromUser: ""
+        property string roomCode: ""
+        
+        background: Rectangle {
+            color: "white"
+            radius: 10
+            border.color: "#5FC8FF"
+            border.width: 3
+        }
+        
+        Column {
+            anchors.centerIn: parent
+            spacing: 20
+            
+            Text {
+                text: globalInvitePopup.fromUser + " invited you to join"
+                font.pixelSize: 18
+                font.bold: true
+                color: "#333"
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            
+            Text {
+                text: "Room: " + globalInvitePopup.roomCode
+                font.pixelSize: 16
+                color: "#5FC8FF"
+                font.bold: true
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            
+            Row {
+                spacing: 20
+                anchors.horizontalCenter: parent.horizontalCenter
+                
+                Rectangle {
+                    width: 120
+                    height: 50
+                    radius: 25
+                    color: "#4CAF50"
+                    border.color: "#388E3C"
+                    border.width: 2
+                    
+                    Text {
+                        anchors.centerIn: parent
+                        text: "ACCEPT"
+                        color: "white"
+                        font.pixelSize: 16
+                        font.bold: true
+                    }
+                    
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (backEnd) {
+                                backEnd.inviteResponse(globalInvitePopup.invitationId, true)
+                            }
+                            globalInvitePopup.close()
+                        }
+                    }
+                }
+                
+                Rectangle {
+                    width: 120
+                    height: 50
+                    radius: 25
+                    color: "#FF5252"
+                    border.color: "#D32F2F"
+                    border.width: 2
+                    
+                    Text {
+                        anchors.centerIn: parent
+                        text: "DECLINE"
+                        color: "white"
+                        font.pixelSize: 16
+                        font.bold: true
+                    }
+                    
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (backEnd) {
+                                backEnd.inviteResponse(globalInvitePopup.invitationId, false)
+                            }
+                            globalInvitePopup.close()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Timers

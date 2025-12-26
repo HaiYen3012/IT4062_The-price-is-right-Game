@@ -152,10 +152,11 @@ Page {
                         visible: passwordField.text.length > 0
 
                         Text {
-                            text: showPassword ? "👁" : "👁‍🗨"
-                            font.pixelSize: 24
+                            text: showPassword ? "Hide" : "Show"
+                            font.pixelSize: 14
                             anchors.centerIn: parent
-                            color: "#666666"
+                            color: "#0891b2"
+                            font.bold: true
                         }
 
                         MouseArea {

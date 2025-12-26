@@ -108,7 +108,7 @@ typedef struct _account
 } Account;
 
 // Callback for async messages
-typedef void (*MessageCallback)(Message msg);
+typedef void (*MessageCallback)(Message* msg);
 
 /*--------------------- Function Declaration -------------------------*/
 int connect_to_server(char ip[], int port);

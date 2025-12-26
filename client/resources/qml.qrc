@@ -9,6 +9,7 @@
         <file alias="qml/KickConfirmPopup.qml">../qml/KickConfirmPopup.qml</file>
         <file alias="qml/Round1Room.qml">../qml/Round1Room.qml</file>
         <file alias="qml/Round2Room.qml">../qml/Round2Room.qml</file>
+        <file alias="qml/Room3.qml">../qml/Room3.qml</file>
         <file alias="qml/RankingPage.qml">../qml/RankingPage.qml</file>
 
         <!-- Sửa 2 dòng này -->
@@ -17,5 +18,6 @@
         <file alias="ui/image.png">../../ui/image.png</file> <!-- giữ nguyên vì đang chạy tốt -->
         <!-- hoặc đẹp hơn nữa (khuyên dùng): copy image.png vào client/ui luôn rồi để -->
         <!-- <file alias="ui/image.png">ui/image.png</file> -->
+        <!-- <file alias="ui/bgroom3.png">ui/bgroom3.png</file> -->
     </qresource>
 </RCC>

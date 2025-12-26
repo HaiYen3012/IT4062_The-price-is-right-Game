@@ -1,184 +1,70 @@
 #include "../headers/BackEnd.h"
 #include <QDebug>
+#include <QMetaObject>
+extern "C" int sockfd;
 
 std::string BackEnd::server_ip = "";
 int BackEnd::server_port = 0;
 BackEnd *BackEnd::instance = nullptr;
 
 // Static callback function for C
-static void message_callback_wrapper(Message msg)
+static void message_callback_wrapper(Message* msg)
 {
-    if (BackEnd::instance) {
-        if (msg.type == INVITE_NOTIFY) {
-            // Parse: invitation_id|from_username|room_code
-            int invitation_id;
-            char from_user[256], room_code[256];
-            sscanf(msg.value, "%d|%[^|]|%s", &invitation_id, from_user, room_code);
-            
-            emit BackEnd::instance->inviteNotify(invitation_id, 
-                QString::fromUtf8(from_user), 
-                QString::fromUtf8(room_code));
-        }
-        else if (msg.type == UPDATE_ROOM_STATE) {
-            emit BackEnd::instance->updateRoomState(QString::fromUtf8(msg.value));
-        }
-        else if (msg.type == GAME_START_NOTIFY) {
-            qDebug() << "Game starting notification received!";
-            emit BackEnd::instance->startGameSuccess();
-        }
-        else if (msg.type == KICK_NOTIFY) {
-            // msg.value contains the host username who kicked
-            qDebug() << "KICK_NOTIFY received from:" << msg.value;
-            emit BackEnd::instance->kickedFromRoom(QString::fromUtf8(msg.value));
-        }
-        else if (msg.type == QUESTION_START) {
-            // Parse: round_id|question_text|option_a|option_b|option_c|option_d
-            qDebug() << "QUESTION_START received, raw data:" << msg.value;
-            
-            int round_id;
-            char question[512], opt_a[256], opt_b[256], opt_c[256], opt_d[256];
-            
-            // Make a copy for parsing
-            char buffer[2048];
-            strncpy(buffer, msg.value, sizeof(buffer) - 1);
-            buffer[sizeof(buffer) - 1] = '\0';
-            
-            // Use strtok on the copy
-            char *token = strtok(buffer, "|");
-            if (token) {
-                round_id = atoi(token);
-                qDebug() << "Round ID:" << round_id;
-                
-                token = strtok(NULL, "|");
-                if (token) {
-                    strcpy(question, token);
-                    qDebug() << "Question:" << question;
-                }
-                
-                token = strtok(NULL, "|");
-                if (token) {
-                    strcpy(opt_a, token);
-                    qDebug() << "Option A:" << opt_a;
-                }
-                
-                token = strtok(NULL, "|");
-                if (token) {
-                    strcpy(opt_b, token);
-                    qDebug() << "Option B:" << opt_b;
-                }
-                
-                token = strtok(NULL, "|");
-                if (token) {
-                    strcpy(opt_c, token);
-                    qDebug() << "Option C:" << opt_c;
-                }
-                
-                token = strtok(NULL, "|");
-                if (token) {
-                    strcpy(opt_d, token);
-                    qDebug() << "Option D:" << opt_d;
-                }
-                
-                qDebug() << "Emitting questionStart signal...";
-                emit BackEnd::instance->questionStart(round_id,
-                    QString::fromUtf8(question),
-                    QString::fromUtf8(opt_a),
-                    QString::fromUtf8(opt_b),
-                    QString::fromUtf8(opt_c),
-                    QString::fromUtf8(opt_d));
-            } else {
-                qDebug() << "ERROR: Failed to parse QUESTION_START!";
-            }
-        }
-        else if (msg.type == QUESTION_RESULT) {
-            emit BackEnd::instance->questionResult(QString::fromUtf8(msg.value));
-        }
-        else if (msg.type == ROUND_START) {
-            // Parse: round_id|round_type|product_name|product_desc|threshold_pct|time_limit|image_url
-            qDebug() << "ROUND_START received, raw data:" << msg.value;
-            
-            char buffer[2048];
-            strncpy(buffer, msg.value, sizeof(buffer) - 1);
-            buffer[sizeof(buffer) - 1] = '\0';
-            
-            int round_id;
-            char round_type[50], product_name[256], product_desc[256], image_url[512];
-            int threshold_pct, time_limit;
-            
-            // Initialize image_url to empty string
-            image_url[0] = '\0';
-            
-            char *token = strtok(buffer, "|");
-            if (token) {
-                round_id = atoi(token);
-                qDebug() << "Round ID:" << round_id;
-                
-                token = strtok(NULL, "|");
-                if (token) {
-                    strcpy(round_type, token);
-                    qDebug() << "Round Type:" << round_type;
-                }
-                
-                token = strtok(NULL, "|");
-                if (token) {
-                    strcpy(product_name, token);
-                    qDebug() << "Product Name:" << product_name;
-                }
-                
-                token = strtok(NULL, "|");
-                if (token) {
-                    strcpy(product_desc, token);
-                    qDebug() << "Product Desc:" << product_desc;
-                }
-                
-                token = strtok(NULL, "|");
-                if (token) {
-                    threshold_pct = atoi(token);
-                    qDebug() << "Threshold %:" << threshold_pct;
-                }
-                
-                token = strtok(NULL, "|");
-                if (token) {
-                    time_limit = atoi(token);
-                    qDebug() << "Time Limit:" << time_limit;
-                }
-                
-                // Parse image_url (optional field)
-                token = strtok(NULL, "|");
-                if (token) {
-                    strcpy(image_url, token);
-                    qDebug() << "Image URL:" << image_url;
-                }
-                
-                qDebug() << "Emitting roundStart signal...";
-                emit BackEnd::instance->roundStart(round_id,
-                    QString::fromUtf8(round_type),
-                    QString::fromUtf8(product_name),
-                    QString::fromUtf8(product_desc),
-                    threshold_pct,
-                    time_limit,
-                    QString::fromUtf8(image_url));
-            } else {
-                qDebug() << "ERROR: Failed to parse ROUND_START!";
-            }
-        }
-        else if (msg.type == ROUND_RESULT) {
-            emit BackEnd::instance->roundResult(QString::fromUtf8(msg.value));
-        }
-        else if (msg.type == GAME_END) {
-            emit BackEnd::instance->gameEnd(QString::fromUtf8(msg.value));
-        }
+    if (!msg || !BackEnd::instance) {
+        return;
     }
+    
+    // Tạo bản copy an toàn của msg->value để tránh race condition
+    // QUAN TRỌNG: Callback này được gọi từ pthread (background thread)
+    // Không thể emit signal trực tiếp từ đây vì Qt không thread-safe
+    // Phải dùng QMetaObject::invokeMethod để chuyển sang main thread
+    
+    // Tạo buffer an toàn với null terminator đảm bảo
+    char safe_buffer[BUFF_SIZE];
+    size_t len = strnlen(msg->value, BUFF_SIZE - 1);
+    memcpy(safe_buffer, msg->value, len);
+    safe_buffer[len] = '\0';
+    
+    QString msgValue = QString::fromUtf8(safe_buffer);
+    int msgType = msg->type;
+    
+    // Gọi slot trong main thread thông qua Qt event queue
+    QMetaObject::invokeMethod(BackEnd::instance, "handleMessageFromThread",
+                              Qt::QueuedConnection,
+                              Q_ARG(int, msgType),
+                              Q_ARG(QString, msgValue));
 }
 
-BackEnd::BackEnd(QObject *parent) : QObject(parent)
+BackEnd::BackEnd(QObject *parent) : QObject(parent), m_currentSeconds(0)
 {
-    instance = this;
-    set_message_callback(message_callback_wrapper);
+    // Chỉ set instance nếu chưa có instance nào
+    if (!instance) {
+        instance = this;
+        set_message_callback(message_callback_wrapper);
+        qDebug() << "BackEnd instance created and set as active";
+    } else {
+        qDebug() << "WARNING: Multiple BackEnd instances detected! This may cause duplicate notifications.";
+    }
+    
+    // Initialize global timer
+    m_globalTimer = new QTimer(this);
+    m_globalTimer->setInterval(1000);
+    connect(m_globalTimer, &QTimer::timeout, this, &BackEnd::onTimerTimeout);
 }
 
 BackEnd::~BackEnd()
 {
+    // Stop timer if running
+    if (m_globalTimer && m_globalTimer->isActive()) {
+        m_globalTimer->stop();
+    }
+    
+    // Chỉ clear instance và callback nếu đây là instance đang active
+    if (instance == this) {
+        instance = nullptr;
+        set_message_callback(nullptr);
+        qDebug() << "BackEnd instance destroyed and cleared";
+    }
     stop_message_listener();
 }
 
@@ -482,6 +368,23 @@ void BackEnd::startGame()
     }
 }
 
+void BackEnd::sendRoundAnswer(QString answer)
+{
+    qDebug() << "Sending round answer/move:" << answer;
+    
+    Message msg;
+    msg.type = ROUND_ANSWER; // Đảm bảo Enum này khớp với Utils.h
+    strcpy(msg.data_type, "text");
+    
+    // Copy dữ liệu an toàn
+    QByteArray ba = answer.toUtf8();
+    strncpy(msg.value, ba.constData(), BUFF_SIZE - 1);
+    msg.value[BUFF_SIZE - 1] = '\0';
+    msg.length = strlen(msg.value);
+    
+    ::send(sockfd, &msg, sizeof(Message), 0);
+}
+
 QString BackEnd::getRoomInfo()
 {
     char buf[4096];
@@ -521,3 +424,201 @@ void BackEnd::submitPrice(int roundId, int guessedPrice)
     }
 }
 
+// Slot được gọi từ main thread để xử lý message từ background thread
+void BackEnd::handleMessageFromThread(int msgType, QString msgValue)
+{
+    QByteArray msgValueBytes = msgValue.toUtf8();
+    const char* safe_value = msgValueBytes.constData();
+    
+    if (msgType == INVITE_NOTIFY) {
+        // Parse: invitation_id|from_username|room_code
+        int invitation_id;
+        char from_user[256], room_code[256];
+        sscanf(safe_value, "%d|%[^|]|%s", &invitation_id, from_user, room_code);
+        
+        emit inviteNotify(invitation_id, 
+            QString::fromUtf8(from_user), 
+            QString::fromUtf8(room_code));
+    }
+    else if (msgType == UPDATE_ROOM_STATE) {
+        emit updateRoomState(msgValue);
+    }
+    else if (msgType == GAME_START_NOTIFY) {
+        qDebug() << "Game starting notification received!" << msgValue;
+        emit gameStarted(msgValue);
+        emit startGameSuccess();
+    }
+    else if (msgType == KICK_NOTIFY) {
+        qDebug() << "KICK_NOTIFY received from:" << msgValue;
+        emit kickedFromRoom(msgValue);
+    }
+    else if (msgType == QUESTION_START) {
+        qDebug() << "QUESTION_START received, raw data:" << msgValue;
+        
+        int round_id;
+        char question[512], opt_a[256], opt_b[256], opt_c[256], opt_d[256];
+        
+        char buffer[2048];
+        strncpy(buffer, safe_value, sizeof(buffer) - 1);
+        buffer[sizeof(buffer) - 1] = '\0';
+        
+        char *token = strtok(buffer, "|");
+        if (token) {
+            round_id = atoi(token);
+            qDebug() << "Round ID:" << round_id;
+            
+            token = strtok(NULL, "|");
+            if (token) {
+                strcpy(question, token);
+                qDebug() << "Question:" << question;
+            }
+            
+            token = strtok(NULL, "|");
+            if (token) {
+                strcpy(opt_a, token);
+                qDebug() << "Option A:" << opt_a;
+            }
+            
+            token = strtok(NULL, "|");
+            if (token) {
+                strcpy(opt_b, token);
+                qDebug() << "Option B:" << opt_b;
+            }
+            
+            token = strtok(NULL, "|");
+            if (token) {
+                strcpy(opt_c, token);
+                qDebug() << "Option C:" << opt_c;
+            }
+            
+            token = strtok(NULL, "|");
+            if (token) {
+                strcpy(opt_d, token);
+                qDebug() << "Option D:" << opt_d;
+            }
+            
+            qDebug() << "Emitting questionStart signal...";
+            emit questionStart(round_id,
+                QString::fromUtf8(question),
+                QString::fromUtf8(opt_a),
+                QString::fromUtf8(opt_b),
+                QString::fromUtf8(opt_c),
+                QString::fromUtf8(opt_d));
+        } else {
+            qDebug() << "ERROR: Failed to parse QUESTION_START!";
+        }
+    }
+    else if (msgType == QUESTION_RESULT) {
+        emit questionResult(msgValue);
+    }
+    else if (msgType == ROUND_START) {
+        qDebug() << "ROUND_START received, raw data:" << msgValue;
+        
+        char buffer[2048];
+        strncpy(buffer, safe_value, sizeof(buffer) - 1);
+        buffer[sizeof(buffer) - 1] = '\0';
+        
+        int round_id = 0;
+        char round_type[50] = "", product_name[256] = "", product_desc[256] = "", image_url[512] = "";
+        int threshold_pct = 0, time_limit = 0;
+        
+        char *token = strtok(buffer, "|");
+        if (token) {
+            round_id = atoi(token);
+            qDebug() << "Round ID:" << round_id;
+            
+            token = strtok(NULL, "|");
+            if (token) {
+                strcpy(round_type, token);
+                qDebug() << "Round Type:" << round_type;
+            }
+            
+            token = strtok(NULL, "|");
+            if (token) {
+                strcpy(product_name, token);
+                qDebug() << "Product Name:" << product_name;
+            }
+            
+            token = strtok(NULL, "|");
+            if (token) {
+                strcpy(product_desc, token);
+                qDebug() << "Product Desc:" << product_desc;
+            }
+            
+            token = strtok(NULL, "|");
+            if (token) {
+                threshold_pct = atoi(token);
+                qDebug() << "Threshold %:" << threshold_pct;
+            }
+            
+            token = strtok(NULL, "|");
+            if (token) {
+                time_limit = atoi(token);
+                qDebug() << "Time Limit:" << time_limit;
+            }
+            
+            token = strtok(NULL, "|");
+            if (token) {
+                strcpy(image_url, token);
+                qDebug() << "Image URL:" << image_url;
+            }
+            
+            qDebug() << "Emitting roundStart signal...";
+            emit roundStart(round_id,
+                QString::fromUtf8(round_type),
+                QString::fromUtf8(product_name),
+                QString::fromUtf8(product_desc),
+                threshold_pct,
+                time_limit,
+                QString::fromUtf8(image_url));
+        } else {
+            qDebug() << "ERROR: Failed to parse ROUND_START!";
+        }
+    }
+    else if (msgType == ROUND_RESULT) {
+        emit roundResult(msgValue);
+    }
+    else if (msgType == ROUND_INFO) {
+        qDebug() << "Received ROUND_INFO (Turn Change):" << msgValue;
+        emit roundResult(msgValue);
+    }
+    else if (msgType == GAME_END) {
+        emit gameEnd(msgValue);
+    }
+}
+
+void BackEnd::startCountdown(int seconds)
+{
+    qDebug() << "Starting global countdown timer:" << seconds << "seconds";
+    
+    // Stop any existing timer first
+    if (m_globalTimer->isActive()) {
+        m_globalTimer->stop();
+        qDebug() << "Stopped previous timer";
+    }
+    
+    m_currentSeconds = seconds;
+    emit timerTick(m_currentSeconds);  // Emit initial value
+    m_globalTimer->start();
+}
+
+void BackEnd::stopCountdown()
+{
+    qDebug() << "Stopping global countdown timer";
+    if (m_globalTimer->isActive()) {
+        m_globalTimer->stop();
+    }
+    m_currentSeconds = 0;
+}
+
+void BackEnd::onTimerTimeout()
+{
+    if (m_currentSeconds > 0) {
+        m_currentSeconds--;
+        emit timerTick(m_currentSeconds);
+        qDebug() << "Timer tick:" << m_currentSeconds;
+    } else {
+        m_globalTimer->stop();
+        qDebug() << "Timer finished";
+    }
+}

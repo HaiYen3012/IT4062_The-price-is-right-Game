@@ -21,6 +21,11 @@
 #define BUFF_SIZE 1024
 #define TRUE 1
 #define FALSE 0
+#define MAX_PLAYERS 4
+#define MOVE_SPIN "SPIN"
+#define MOVE_PASS "PASS"
+#define SPIN_RESULT "SPIN_RESULT"
+#define ROUND3_END "ROUND3_END"
 
 // Message types - PHẢI GIỐNG CLIENT
 enum msg_type
@@ -129,12 +134,28 @@ typedef struct _client
   struct _client *next;
 } Client;
 
+typedef struct _match {
+    int room_id;
+    int player_ids[MAX_PLAYERS];
+    char player_names[MAX_PLAYERS][BUFF_SIZE];
+    int r3_scores[MAX_PLAYERS];
+    int r3_spins[MAX_PLAYERS];
+    int r3_passed[MAX_PLAYERS];
+    int count_players;
+    int current_round;
+    int current_turn_index;
+    struct _match *next;
+} Match;
+
 // Global variables
 extern Client *head_client;
 extern pthread_mutex_t mutex;
 extern MYSQL *g_mysql_conn;
+extern Match *head_match;
 
 // Function declarations
+void broadcast_match_json(Match *m, const char *json_data, int type);
+void start_round3(int room_id);
 void start_server(int port);
 void *handle_client(void *arg);
 void catch_ctrl_c_and_exit(int sig);
@@ -175,4 +196,10 @@ void start_round2(int room_id, int match_id);
 int handle_price_submit(Client *cli, char price_data[]);
 void broadcast_round2_result(int room_id, int round_id);
 
+// Round 3 game functions
+Match *find_match(int room_id);
+void handle_round_3_move(Client *cli, char move_data[]);
+void create_match_in_memory(int room_id);
+void start_round3(int room_id);
+void broadcast_match_json(Match *m, const char *json_data, int type);
 #endif
