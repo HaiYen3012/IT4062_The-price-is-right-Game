@@ -494,7 +494,7 @@ Page {
                     id: spinBtn
                     width: 120
                     height: 50
-                    text: spinning ? "⏳ ..." : (currentTurnSpins === 0 ? "🎰 SPIN 1" : "🎰 SPIN 2")
+                    text: spinning ? "SPINNING..." : (currentTurnSpins === 0 ? "SPIN 1" : "SPIN 2")
                     
                     // Logic tự động: Chỉ cần khai báo ở đây, KHÔNG can thiệp thủ công
                     enabled: parent.isMyTurn && !spinning && backend !== null && currentTurnSpins < 2
@@ -672,7 +672,7 @@ Page {
             
             // Title
             Text {
-                text: "🎉 VÒNG 3 KẾT THÚC 🎉"
+                text: "*** VÒNG 3 KẾT THÚC ***"
                 font.pixelSize: 28
                 font.bold: true
                 color: "#FFD700"

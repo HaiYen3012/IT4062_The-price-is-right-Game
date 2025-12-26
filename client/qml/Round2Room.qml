@@ -497,21 +497,24 @@ Page {
                             
                             Text {
                                 anchors.centerIn: parent
-                                text: "⏳"
+                                text: "Loading..."
                                 color: "#7C3AED"
-                                font.pixelSize: 30
+                                font.pixelSize: 20
+                                font.bold: true
                             }
                         }
                         
                         Rectangle {
                             anchors.fill: parent
-                            color: "white"
+                            color: "#f5f5f5"
                             visible: parent.status === Image.Error || productImage === ""
                             
                             Text {
                                 anchors.centerIn: parent
-                                text: "📦"
-                                font.pixelSize: 50
+                                text: "No Image"
+                                font.pixelSize: 24
+                                color: "#999"
+                                font.bold: true
                             }
                         }
                     }
@@ -744,7 +747,7 @@ Page {
                         spacing: 2
                         
                         Text {
-                            text: "💰 ACTUAL PRICE"
+                            text: "ACTUAL PRICE"
                             font.pixelSize: 11
                             font.bold: true
                             color: "white"
