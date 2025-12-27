@@ -110,7 +110,8 @@ enum msg_type
   JOIN_AS_VIEWER_FAIL,
   VIEWER_STATE_UPDATE,
   VIEWER_SYNC,
-  LEAVE_VIEWER
+  LEAVE_VIEWER,
+  ROOM_CLOSED
 };
 
 enum login_status
@@ -154,6 +155,8 @@ typedef struct _match {
     int count_players;
     int current_round;
     int current_turn_index;
+    char current_state[50];  // Track state: "QUESTION", "RESULT", "RANKING", "ROUND2", "ROUND2_RESULT", "ROUND3"
+    int current_round_id;    // Current active round_id
     struct _match *next;
 } Match;
 

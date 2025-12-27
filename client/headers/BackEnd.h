@@ -89,6 +89,7 @@ signals:
     void joinAsViewerFail();
     void viewerStateUpdate(QString data);
     void viewerSync(QString syncData);
+    void roomClosed(QString message);
 
 public slots:
     void handleMessageFromThread(int msgType, QString msgValue);

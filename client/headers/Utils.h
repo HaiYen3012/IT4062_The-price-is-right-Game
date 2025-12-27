@@ -96,7 +96,8 @@ enum msg_type
   JOIN_AS_VIEWER_FAIL,
   VIEWER_STATE_UPDATE,
   VIEWER_SYNC,
-  LEAVE_VIEWER
+  LEAVE_VIEWER,
+  ROOM_CLOSED
 };
 
 typedef struct _message

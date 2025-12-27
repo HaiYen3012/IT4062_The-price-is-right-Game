@@ -608,6 +608,10 @@ void BackEnd::handleMessageFromThread(int msgType, QString msgValue)
         qDebug() << "VIEWER_SYNC received:" << msgValue;
         emit viewerSync(msgValue);
     }
+    else if (msgType == ROOM_CLOSED) {
+        qDebug() << "ROOM_CLOSED received:" << msgValue;
+        emit roomClosed(msgValue);
+    }
 }
 
 void BackEnd::startCountdown(int seconds)

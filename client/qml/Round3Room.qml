@@ -22,6 +22,7 @@ Page {
     
     property string myUserName: backend ? backend.user_name : ""
     property bool isViewerMode: false  // For viewers watching the game
+    property var initialPlayers: []  // For viewer mode - initial players from sync
     
     // Biến đếm lượt quay (0, 1, 2)
     property int currentTurnSpins: 0 
@@ -899,19 +900,42 @@ Page {
     }
 
     Component.onCompleted: {
-        if (backend) {
+        console.log("[Round3] Component loaded, isViewerMode:", isViewerMode);
+        
+        // For viewer mode, use initialPlayers if provided
+        if (isViewerMode && initialPlayers && initialPlayers.length > 0) {
+            console.log("[Round3] Initializing viewer mode with players:", JSON.stringify(initialPlayers));
+            playersModel.clear();
+            for (var i = 0; i < initialPlayers.length; i++) {
+                var player = initialPlayers[i];
+                playersModel.append({ 
+                    name: player.username || "", 
+                    score: player.total_score || 0,
+                    eliminated: false 
+                });
+                console.log("[Round3] Added player:", player.username, "score:", player.total_score);
+            }
+        }
+        // For player mode, use room info
+        else if (backend) {
             var infoStr = backend.getRoomInfo()
             if (infoStr !== "") {
                 try {
                     var info = JSON.parse(infoStr)
                     var members = info.members.split('|')
                     playersModel.clear()
-                    for (var i = 0; i < members.length; i++) {
-                        playersModel.append({ name: members[i], score: 0, eliminated: false })
+                    for (var j = 0; j < members.length; j++) {
+                        playersModel.append({ name: members[j], score: 0, eliminated: false })
                     }
-                } catch(e) {}
-            } else { setupDummyPlayers() }
-        } else { setupDummyPlayers() }
+                } catch(e) {
+                    console.error("[Round3] Failed to parse room info:", e);
+                }
+            } else { 
+                setupDummyPlayers() 
+            }
+        } else { 
+            setupDummyPlayers() 
+        }
 
         if (spinnerViewport) {
             spinnerOffset = - ((cycles) * numbers.length) * itemHeight + (spinnerViewport.height/2 - itemHeight/2)
@@ -947,6 +971,13 @@ Page {
         target: backend
         function onSystemNotice(message) {
             systemNoticePopup.show(message)
+        }
+        
+        function onRoomClosed(message) {
+            console.log("[Round3] Room closed:", message);
+            if (isViewerMode) {
+                stackView.replace("qrc:/qml/HomeUser.qml", {backend: backend});
+            }
         }
     }
 }

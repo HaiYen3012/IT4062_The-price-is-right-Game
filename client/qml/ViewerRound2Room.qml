@@ -9,6 +9,7 @@ Page {
     
     property var backend: null
     property string roomCode: ""
+    property string initialState: "QUESTION"  // Can be "QUESTION" or "RESULT"
     property int round2Id: 0
     property string productName: ""
     property string productDesc: ""
@@ -18,34 +19,58 @@ Page {
     property int actualPrice: 0
     property bool showResult: false
     property var playerScores: []
+    property bool justJoinedDuringResult: false  // Flag to track if viewer joined during result phase
+    property string pendingRankingData: ""  // Store ranking data during delay
     
-    // Timer để tự động chuyển sang RankingPage sau khi hiển thị result
+    // Timer để hiển thị result trước khi chuyển ranking (giống player)
     Timer {
         id: resultDisplayTimer
-        interval: 3000  // 3 giây sau khi có result thì chuyển sang RankingPage
-        running: false
+        interval: 3000  // 3 giây hiển thị kết quả
         repeat: false
         onTriggered: {
-            console.log("[VIEWER] Auto switching to RankingPage after Round 2");
-            navigateToRanking();
+            console.log("[VIEWER R2] Result display timeout, showing ranking");
+            rankingDelayTimer.start();
         }
     }
     
-    function navigateToRanking() {
-        if (!playerScores || playerScores.length === 0) {
-            console.log("[VIEWER] No player scores to show ranking");
-            return;
+    // Timer để delay nhỏ trước khi push ranking
+    Timer {
+        id: rankingDelayTimer
+        interval: 500  // 0.5 giây delay (giống player)
+        repeat: false
+        onTriggered: {
+            console.log("[VIEWER R2] Timer expired, navigating to ranking");
+            showRankingPage();
+        }
+    }
+    
+    function showRankingPage() {
+        console.log("[VIEWER R2] showRankingPage called");
+        var players = [];
+        
+        // Try to use pendingRankingData first, otherwise use current playerScores
+        if (pendingRankingData) {
+            try {
+                var data = JSON.parse(pendingRankingData);
+                players = data.players || [];
+                console.log("[VIEWER R2] Using pending ranking data with", players.length, "players");
+            } catch (e) {
+                console.error("[VIEWER R2] Failed to parse pending ranking data:", e);
+                players = playerScores;
+            }
+        } else {
+            players = playerScores;
+            console.log("[VIEWER R2] Using current playerScores with", players.length, "players");
         }
         
-        // Thêm rank vào dữ liệu
-        var sortedPlayers = playerScores.slice().sort(function(a, b) {
-            return (b.score || 0) - (a.score || 0);
+        // Sort and add rank
+        var sortedPlayers = players.slice().sort(function(a, b) {
+            return (b.total_score || b.score || 0) - (a.total_score || a.score || 0);
         });
         for (var i = 0; i < sortedPlayers.length; i++) {
             sortedPlayers[i].rank = i + 1;
         }
         
-        console.log("[VIEWER] Switching to RankingPage Round 2");
         stackView.replace("qrc:/qml/RankingPage.qml", { 
             backend: backend,
             rankings: sortedPlayers,
@@ -57,6 +82,23 @@ Page {
     
     Component.onCompleted: {
         console.log("ViewerRound2Room loaded for room:", roomCode);
+        console.log("[VIEWER R2] initialState:", initialState);
+        console.log("[VIEWER R2] showResult:", showResult);
+        console.log("[VIEWER R2] actualPrice:", actualPrice);
+        console.log("[VIEWER R2] timeRemaining:", timeRemaining);
+        
+        // If viewer joined during result phase, start timer to show ranking
+        if (initialState === "RESULT" && showResult) {
+            justJoinedDuringResult = true;
+            console.log("[VIEWER R2] Joined during RESULT phase, starting timer");
+            resultDisplayTimer.start();  // Start 3 second timer to match player experience
+        } else if (initialState === "QUESTION" && timeRemaining > 0) {
+            // If viewer joined during active question/product display, start countdown
+            console.log("[VIEWER R2] Joined during QUESTION phase, starting countdown with", timeRemaining, "seconds");
+            if (backend) {
+                backend.startCountdown(timeRemaining);
+            }
+        }
     }
     
     Connections {
@@ -64,7 +106,10 @@ Page {
         enabled: viewerRound2Room.StackView.status === StackView.Active
         
         function onRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit_, imageUrl) {
-            console.log("[VIEWER] Round 2 started:", prodName);
+            console.log("[VIEWER R2] ROUND_START received - Round:", roundId, "Type:", roundType);
+            
+            // This should be Round 2 start
+            console.log("[VIEWER R2] Round 2 started:", prodName);
             round2Id = roundId;
             productName = prodName;
             productDesc = prodDesc;
@@ -74,12 +119,16 @@ Page {
             showResult = false;
             actualPrice = 0;
             playerScores = [];
+            
+            // Start countdown timer
+            if (backend && timeLimit_ > 0) {
+                backend.startCountdown(timeLimit_);
+                console.log("[VIEWER R2] Started countdown with", timeLimit_, "seconds");
+            }
         }
         
         function onRoundResult(resultData) {
-            console.log("[VIEWER] Round 2 result received:", resultData);
-            console.log("[VIEWER] ViewerRound2Room status:", viewerRound2Room.StackView.status);
-            console.log("[VIEWER] Active status:", StackView.Active);
+            console.log("[VIEWER R2] Round 2 result received:", resultData);
             try {
                 var result = JSON.parse(resultData);
                 if (result.actual_price !== undefined) {
@@ -87,25 +136,33 @@ Page {
                     playerScores = result.players || [];
                     showResult = true;
                     
-                    // Tự động chuyển sang RankingPage sau 3 giây
-                    console.log("[VIEWER] Starting timer to switch to RankingPage");
+                    // Reset flag since we're now seeing result in real-time
+                    justJoinedDuringResult = false;
+                    console.log("[VIEWER R2] Result displayed, starting timer");
+                    
+                    // Start timer to show ranking after 3 seconds (match player)
                     resultDisplayTimer.start();
                 }
             } catch (e) {
-                console.error("[VIEWER] Failed to parse result:", e);
+                console.error("[VIEWER R2] Failed to parse result:", e);
             }
         }
         
         function onGameEnd(rankingData) {
-            console.log("[VIEWER] GAME_END received after Round 2");
-            console.log("[VIEWER] ViewerRound2Room status:", viewerRound2Room.StackView.status);
-            console.log("[VIEWER] Ranking data:", rankingData);
+            console.log("[VIEWER R2] GAME_END received (final ranking after all rounds)");
+            console.log("[VIEWER R2] Ranking data:", rankingData);
+            
+            // This is final ranking after Round 3, not Round 2 ranking
+            // Stop timers and navigate to final ranking
+            resultDisplayTimer.stop();
+            rankingDelayTimer.stop();
+            
             try {
                 var data = JSON.parse(rankingData);
                 var players = data.players || [];
-                console.log("[VIEWER] Players count:", players.length);
+                console.log("[VIEWER R2] Final ranking, players count:", players.length);
                 
-                // Thêm rank vào dữ liệu
+                // Sort and add rank
                 var sortedPlayers = players.slice().sort(function(a, b) {
                     return (b.total_score || 0) - (a.total_score || 0);
                 });
@@ -113,17 +170,17 @@ Page {
                     sortedPlayers[i].rank = i + 1;
                 }
                 
-                console.log("[VIEWER] Switching to RankingPage Round 2");
-                // Chuyển sang RankingPage (viewer mode) sau Round 2
+                console.log("[VIEWER R2] Switching to final RankingPage");
                 stackView.replace("qrc:/qml/RankingPage.qml", { 
                     backend: backend,
                     rankings: sortedPlayers,
-                    roundNumber: 2,
+                    roundNumber: 3,
+                    isFinalRanking: true,
                     isViewer: true,
                     roomCode: roomCode
                 });
             } catch (e) {
-                console.error("[VIEWER] Failed to parse GAME_END:", e);
+                console.error("[VIEWER R2] Failed to parse GAME_END:", e);
             }
         }
         
@@ -659,6 +716,11 @@ Page {
         target: backend
         function onSystemNotice(message) {
             systemNoticePopup.show(message)
+        }
+        
+        function onRoomClosed(message) {
+            console.log("[VIEWER R2] Room closed:", message);
+            stackView.replace("qrc:/qml/HomeUser.qml", {backend: backend});
         }
     }
 }

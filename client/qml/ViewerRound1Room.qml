@@ -10,6 +10,7 @@ Page {
     property var backend: null
     property string roomCode: ""
     property string syncData: ""  // Sync data from server
+    property string initialState: "QUESTION"  // Can be "QUESTION" or "RESULT"
     property int currentRoundId: 0
     property string currentQuestion: ""
     property string optionA: ""
@@ -20,31 +21,108 @@ Page {
     property var playerScores: []
     property string correctAnswer: ""
     property bool showResult: false
+    property bool justJoinedDuringResult: false  // Flag to track if viewer joined during result phase
+    
+    // Timer to delay transition to ranking (to match player experience)
+    Timer {
+        id: rankingDelayTimer
+        interval: 5000  // 5 seconds delay before showing ranking
+        repeat: false
+        onTriggered: {
+            console.log("[VIEWER] Timer expired, navigating to ranking");
+            showRankingPage();
+        }
+    }
+    
+    function showRankingPage() {
+        if (pendingRankingData) {
+            try {
+                var data = JSON.parse(pendingRankingData);
+                var players = data.players || [];
+                
+                // Thêm rank vào dữ liệu
+                var sortedPlayers = players.slice().sort(function(a, b) {
+                    return (b.total_score || 0) - (a.total_score || 0);
+                });
+                for (var i = 0; i < sortedPlayers.length; i++) {
+                    sortedPlayers[i].rank = i + 1;
+                }
+                
+                // Chuyển sang RankingPage (viewer mode)
+                stackView.replace("qrc:/qml/RankingPage.qml", { 
+                    backend: backend,
+                    rankings: sortedPlayers,
+                    roundNumber: 1,
+                    isViewer: true,
+                    roomCode: roomCode
+                });
+            } catch (e) {
+                console.error("[VIEWER] Failed to parse ranking data:", e);
+            }
+        }
+    }
+    
+    property string pendingRankingData: ""
     
     Component.onCompleted: {
         console.log("ViewerRound1Room loaded for room:", roomCode);
         console.log("[VIEWER] syncData type:", typeof syncData, "value:", syncData);
         console.log("[VIEWER] syncData length:", syncData ? syncData.length : 0);
+        console.log("[VIEWER] initialState:", initialState);
         
         // Process sync data if available
         if (syncData && syncData !== "" && syncData.length > 0) {
             console.log("[VIEWER] Processing sync data:", syncData);
             try {
                 var data = JSON.parse(syncData);
-                console.log("[VIEWER] Parsed data, question_id:", data.question_id);
-                if (data.question_id) {
+                var state = data.state || "";
+                console.log("[VIEWER] Parsed data, state:", state, "question_id:", data.question_id);
+                
+                // Set initial display based on state
+                if (state === "RESULT" || initialState === "RESULT") {
+                    // Viewer joined during result phase
+                    console.log("[VIEWER] Showing result immediately");
+                    // Set question data first
+                    currentQuestion = data.question || "";
+                    optionA = data.optionA || "";
+                    optionB = data.optionB || "";
+                    optionC = data.optionC || "";
+                    optionD = data.optionD || "";
+                    // Then set result
+                    correctAnswer = data.correct_answer || "";
+                    playerScores = data.players || [];
+                    showResult = true;
+                    justJoinedDuringResult = true;  // Mark that we joined during result
+                    console.log("[VIEWER] Question:", currentQuestion);
+                    console.log("[VIEWER] Correct answer:", correctAnswer);
+                    // Don't show question first, show result directly
+                } else if (data.question_id) {
+                    // Viewer joined during question phase
+                    console.log("[VIEWER] Showing question");
                     currentRoundId = data.round_id || 0;
                     currentQuestion = data.question || "";
                     optionA = data.optionA || "";
                     optionB = data.optionB || "";
                     optionC = data.optionC || "";
                     optionD = data.optionD || "";
-                    timeRemaining = data.time_limit || 15;
+                    
+                    // Use time_remaining if available, otherwise use time_limit
+                    var timeToUse = data.time_remaining !== undefined ? data.time_remaining : (data.time_limit || 15);
+                    timeRemaining = timeToUse;
                     playerScores = data.players || [];
+                    showResult = false;
+                    
                     console.log("[VIEWER] Synced question:", currentQuestion);
                     console.log("[VIEWER] Options:", optionA, optionB, optionC, optionD);
+                    console.log("[VIEWER] Time remaining:", timeToUse, "seconds");
+                    
+                    // Start countdown with remaining time
+                    if (backend && timeToUse > 0) {
+                        backend.startCountdown(timeToUse);
+                        console.log("[VIEWER] Started countdown with", timeToUse, "seconds");
+                    }
                 } else {
-                    console.warn("[VIEWER] No question_id in sync data");
+                    console.warn("[VIEWER] No question_id or state in sync data");
                 }
             } catch (e) {
                 console.error("[VIEWER] Failed to parse sync data:", e);
@@ -70,8 +148,13 @@ Page {
             showResult = false;
             correctAnswer = "";
             playerScores = [];
+            
+            // Start countdown timer
+            if (backend) {
+                backend.startCountdown(15);
+                console.log("[VIEWER] Started countdown for new question");
+            }
         }
-        
         function onQuestionResult(resultData) {
             console.log("[VIEWER] Result received:", resultData);
             try {
@@ -79,35 +162,26 @@ Page {
                 correctAnswer = result.correct;
                 playerScores = result.players;
                 showResult = true;
+                justJoinedDuringResult = false;  // Reset flag since we're now in sync
             } catch (e) {
                 console.error("[VIEWER] Failed to parse result:", e);
             }
         }
         
         function onGameEnd(rankingData) {
-            console.log("[VIEWER] GAME_END received - showing ranking");
-            try {
-                var data = JSON.parse(rankingData);
-                var players = data.players || [];
-                
-                // Thêm rank vào dữ liệu
-                var sortedPlayers = players.slice().sort(function(a, b) {
-                    return (b.total_score || 0) - (a.total_score || 0);
-                });
-                for (var i = 0; i < sortedPlayers.length; i++) {
-                    sortedPlayers[i].rank = i + 1;
-                }
-                
-                // Chuyển sang RankingPage (viewer mode)
-                stackView.replace("qrc:/qml/RankingPage.qml", { 
-                    backend: backend,
-                    rankings: sortedPlayers,
-                    roundNumber: 1,
-                    isViewer: true,
-                    roomCode: roomCode
-                });
-            } catch (e) {
-                console.error("[VIEWER] Failed to parse GAME_END:", e);
+            console.log("[VIEWER] GAME_END received");
+            pendingRankingData = rankingData;
+            
+            // If viewer just joined during result phase, they haven't seen the result long enough
+            // so we need to delay the transition to ranking to match player experience
+            if (justJoinedDuringResult && showResult) {
+                console.log("[VIEWER] Delaying ranking transition to allow viewing result");
+                rankingDelayTimer.start();
+            } else {
+                // Normal case: viewer was present from the start or during question
+                // They already saw the result for 8 seconds like players, so show ranking immediately
+                console.log("[VIEWER] Showing ranking immediately");
+                showRankingPage();
             }
         }
         
@@ -693,7 +767,7 @@ Page {
                                     spacing: 0
                                     
                                     Text {
-                                        text: modelData.username || modelData.name
+                                        text: modelData.username || modelData.name || ""
                                         font.pixelSize: 10
                                         font.bold: true
                                         color: "white"
@@ -701,7 +775,7 @@ Page {
                                     }
                                     
                                     Text {
-                                        text: modelData.score + " pts"
+                                        text: (modelData.total_score || modelData.score || 0) + " pts"
                                         font.pixelSize: 14
                                         font.bold: true
                                         color: "white"
@@ -753,6 +827,11 @@ Page {
         target: backend
         function onSystemNotice(message) {
             systemNoticePopup.show(message)
+        }
+        
+        function onRoomClosed(message) {
+            console.log("[VIEWER R1] Room closed:", message);
+            stackView.replace("qrc:/qml/HomeUser.qml", {backend: backend});
         }
     }
 }

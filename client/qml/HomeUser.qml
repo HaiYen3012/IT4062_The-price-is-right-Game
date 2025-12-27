@@ -103,20 +103,39 @@ Page {
             
             try {
                 var data = JSON.parse(syncData);
+                var state = data.state || "";
                 var roundType = data.round_type || "UNKNOWN";
                 var currentRound = data.round || 1;
                 
-                console.log("Sync data - Round:", currentRound, "Type:", roundType);
+                console.log("Sync data - State:", state, "Round:", currentRound, "Type:", roundType);
                 
-                if (roundType === "ROUND1") {
-                    // Navigate to ViewerRound1Room with synced data
+                // Handle based on state field first
+                if (state === "QUESTION" || (state === "" && roundType === "ROUND1" && data.question)) {
+                    // Round 1: Currently showing question
+                    console.log("Viewer joining during QUESTION");
                     stackView.push("qrc:/qml/ViewerRound1Room.qml", {
                         backend: backend,
                         roomCode: pendingRoomCode,
                         syncData: syncData
                     });
-                } else if (roundType === "V1" || roundType === "V2" || roundType === "V4") {
-                    // Round 2 (V1/V2/V4)
+                } else if (state === "RESULT") {
+                    // Round 1: Currently showing result
+                    console.log("Viewer joining during RESULT");
+                    stackView.push("qrc:/qml/ViewerRound1Room.qml", {
+                        backend: backend,
+                        roomCode: pendingRoomCode,
+                        syncData: syncData,
+                        initialState: "RESULT"
+                    });
+                } else if (state === "ROUND2" || state === "ROUND2_RESULT" || (roundType === "V1" || roundType === "V2" || roundType === "V4")) {
+                    // Round 2: Showing product or result
+                    var isResult = (state === "ROUND2_RESULT");
+                    console.log("Viewer joining during ROUND2", isResult ? "(RESULT)" : "(QUESTION)");
+                    
+                    // Use time_remaining if available, otherwise fallback to time_limit
+                    var timeToUse = data.time_remaining !== undefined ? data.time_remaining : (data.time_limit || 30);
+                    console.log("Round 2 time - remaining:", data.time_remaining, "limit:", data.time_limit, "using:", timeToUse);
+                    
                     stackView.push("qrc:/qml/ViewerRound2Room.qml", {
                         backend: backend,
                         roomCode: pendingRoomCode,
@@ -125,22 +144,41 @@ Page {
                         productDesc: data.product_desc || "",
                         productImage: data.product_image || "",
                         thresholdPct: data.threshold || 0,
-                        timeRemaining: data.time_limit || 30,
+                        timeRemaining: timeToUse,
                         actualPrice: data.product_price || 0,
-                        playerScores: data.players || []
+                        playerScores: data.players || [],
+                        showResult: isResult,
+                        initialState: isResult ? "RESULT" : "QUESTION"
                     });
-                } else if (roundType === "V3") {
-                    // Round 3 - use Round3Room with viewer mode
+                } else if (state === "ROUND3" || roundType === "V3") {
+                    // Round 3 - Use Round3Room with viewer mode
+                    console.log("Viewer joining during ROUND3");
+                    
+                    // Parse players from sync data
+                    var players = data.players || [];
+                    console.log("Round 3 players:", JSON.stringify(players));
+                    
                     stackView.push("qrc:/qml/Round3Room.qml", {
                         backend: backend,
-                        isViewerMode: true
+                        isViewerMode: true,
+                        initialPlayers: players  // Pass players to initialize
                     });
-                } else if (roundType === "RANKING") {
+                } else if (state === "RANKING" || roundType === "RANKING") {
                     // Currently in ranking page between rounds
-                    console.log("Joined during ranking, showing RankingPage");
+                    console.log("Viewer joining during RANKING");
+                    
+                    // Sort players and add rank (same as Round1Room does)
+                    var players = data.players || [];
+                    var sortedPlayers = players.slice().sort(function(a, b) {
+                        return (b.total_score || b.score || 0) - (a.total_score || a.score || 0);
+                    });
+                    for (var i = 0; i < sortedPlayers.length; i++) {
+                        sortedPlayers[i].rank = i + 1;
+                    }
+                    
                     stackView.push("qrc:/qml/RankingPage.qml", {
                         backend: backend,
-                        rankings: data.players || [],
+                        rankings: sortedPlayers,
                         roundNumber: currentRound,
                         isFinalRanking: false,
                         isViewer: true,
@@ -148,7 +186,7 @@ Page {
                     });
                 } else {
                     // Unknown - fallback to Round1
-                    console.warn("Unknown round type:", roundType);
+                    console.warn("Unknown state/round type:", state, roundType);
                     stackView.push("qrc:/qml/ViewerRound1Room.qml", {
                         backend: backend,
                         roomCode: pendingRoomCode

@@ -9,28 +9,125 @@ Page {
     
     property var backend: null
     property string roomCode: ""
+    property string syncData: ""  // Initial sync data from server
     property var currentState: null
     
     Component.onCompleted: {
-        console.log("ViewerRound3Room loaded for room:", roomCode);
+        console.log("[VIEWER R3] ViewerRound3Room loaded for room:", roomCode);
+        console.log("[VIEWER R3] syncData:", syncData);
+        
+        // Parse initial sync data to populate players
+        if (syncData && syncData !== "") {
+            try {
+                var data = JSON.parse(syncData);
+                console.log("[VIEWER R3] Parsed sync data:", JSON.stringify(data));
+                
+                var players = data.players || [];
+                console.log("[VIEWER R3] Players count:", players.length);
+                
+                playersModel.clear();
+                for (var i = 0; i < players.length; i++) {
+                    var player = players[i];
+                    console.log("[VIEWER R3] Player:", player.username, "total_score:", player.total_score);
+                    playersModel.append({
+                        name: player.username || "",
+                        r1Score: 0,  // We don't have individual round scores in sync
+                        r2Score: 0,
+                        r3Score: 0,
+                        totalScore: player.total_score || 0,
+                        eliminated: false
+                    });
+                }
+            } catch (e) {
+                console.error("[VIEWER R3] Failed to parse initial sync data:", e);
+            }
+        }
     }
     
     Connections {
         target: backend
         enabled: viewerRound3Room.StackView.status === StackView.Active
         
+        function onRoundResult(resultJson) {
+            console.log("[VIEWER R3] Round result:", resultJson);
+            try {
+                var res = JSON.parse(resultJson);
+                
+                if (res.type === "PLAYER_LEFT") {
+                    console.log("[VIEWER R3] Player left:", res.username);
+                    // Update player list to show eliminated
+                    for (var i = 0; i < playersModel.count; i++) {
+                        if (playersModel.get(i).name === res.username) {
+                            playersModel.setProperty(i, "eliminated", true);
+                            break;
+                        }
+                    }
+                }
+                else if (res.type === "SPIN_RESULT") {
+                    console.log("[VIEWER R3] Spin result for:", res.user, "value:", res.value);
+                    // Update player's R3 score
+                    for (var j = 0; j < playersModel.count; j++) {
+                        if (playersModel.get(j).name === res.user) {
+                            var currentR3 = playersModel.get(j).r3Score;
+                            var newR3 = currentR3 + res.value;
+                            playersModel.setProperty(j, "r3Score", newR3);
+                            
+                            var r1 = playersModel.get(j).r1Score;
+                            var r2 = playersModel.get(j).r2Score;
+                            playersModel.setProperty(j, "totalScore", r1 + r2 + newR3);
+                            console.log("[VIEWER R3] Updated", res.user, "R3 score to", newR3);
+                            break;
+                        }
+                    }
+                }
+                else if (res.type === "TURN_CHANGE") {
+                    console.log("[VIEWER R3] Turn changed to:", res.next_user);
+                    // Could highlight current player if needed
+                }
+            } catch (e) {
+                console.error("[VIEWER R3] Failed to parse result:", e);
+            }
+        }
+        
+        function onGameEnd(rankingData) {
+            console.log("[VIEWER R3] GAME_END received, navigating to final ranking");
+            try {
+                var data = JSON.parse(rankingData);
+                var players = data.players || [];
+                
+                // Sort and add rank
+                var sortedPlayers = players.slice().sort(function(a, b) {
+                    return (b.total_score || 0) - (a.total_score || 0);
+                });
+                for (var i = 0; i < sortedPlayers.length; i++) {
+                    sortedPlayers[i].rank = i + 1;
+                }
+                
+                stackView.replace("qrc:/qml/RankingPage.qml", {
+                    backend: backend,
+                    rankings: sortedPlayers,
+                    roundNumber: 3,
+                    isFinalRanking: true,
+                    isViewer: true,
+                    roomCode: roomCode
+                });
+            } catch (e) {
+                console.error("[VIEWER R3] Failed to parse GAME_END:", e);
+            }
+        }
+        
         function onViewerStateUpdate(data) {
-            console.log("Viewer state update:", data);
+            console.log("[VIEWER R3] State update:", data);
             try {
                 currentState = JSON.parse(data);
                 updateDisplay();
             } catch (e) {
-                console.error("Failed to parse viewer state:", e);
+                console.error("[VIEWER R3] Failed to parse viewer state:", e);
             }
         }
         
         function onLeaveRoomSuccess() {
-            console.log("Viewer left room");
+            console.log("[VIEWER R3] Left room");
             stackView.replace("qrc:/qml/HomeUser.qml", {backend: backend});
         }
     }
