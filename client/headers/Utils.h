@@ -90,7 +90,14 @@ enum msg_type
   SPECTATE_JOIN,
   SPECTATE_JOIN_RESULT,
   SYSTEM_NOTICE,
-  SYSTEM_ERROR
+  SYSTEM_ERROR,
+  JOIN_AS_VIEWER,
+  JOIN_AS_VIEWER_SUCCESS,
+  JOIN_AS_VIEWER_FAIL,
+  VIEWER_STATE_UPDATE,
+  VIEWER_SYNC,
+  LEAVE_VIEWER,
+  ROOM_CLOSED
 };
 
 typedef struct _message
@@ -135,6 +142,9 @@ int get_room_info(char buffer[], int bufsize);
 int submit_answer(int round_id, char answer_choice[]);
 // Round 2 functions
 int submit_price(int round_id, int guessed_price);
+// Viewer functions
+int join_as_viewer(char room_code[]);
+int leave_viewer();
 // Message listener
 void set_message_callback(MessageCallback callback);
 void start_message_listener();

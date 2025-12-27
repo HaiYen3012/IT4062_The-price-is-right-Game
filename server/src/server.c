@@ -18,6 +18,7 @@ Client *new_client()
     new->async_conn_fd = -1;
     new->room_id = 0;
     new->is_ready = 0;
+    new->is_viewer = 0;
     new->next = NULL;
     return new;
 }
@@ -381,11 +382,11 @@ void *handle_client(void *arg)
                     printf("[%d] Client requested room list\n", conn_fd);
                     pthread_mutex_lock(&mutex);
                     char q[512];
-                    // Chỉ hiển thị phòng LOBBY và có ít nhất 1 người trong phòng
-                    sprintf(q, "SELECT room_id, room_code, max_players, "
-                               "(SELECT COUNT(*) FROM room_members rm WHERE rm.room_id = r.room_id AND rm.left_at IS NULL) AS current_players "
+                    // Hiển thị cả phòng LOBBY (có thể join) và PLAYING (có thể xem)
+                    sprintf(q, "SELECT room_id, room_code, max_players, status, "
+                               "(SELECT COUNT(*) FROM room_members rm WHERE rm.room_id = r.room_id AND rm.left_at IS NULL AND rm.role = 'PLAYER') AS current_players "
                                "FROM rooms r "
-                               "WHERE r.status = 'LOBBY' "
+                               "WHERE r.status IN ('LOBBY', 'PLAYING') "
                                "HAVING current_players > 0");
                     if (mysql_query(g_db_conn, q)) {
                         fprintf(stderr, "MySQL query error: %s\n", mysql_error(g_db_conn));
@@ -404,8 +405,10 @@ void *handle_client(void *arg)
                             const char *room_id = row[0] ? row[0] : "0";
                             const char *room_code = row[1] ? row[1] : "";
                             const char *max_p = row[2] ? row[2] : "0";
-                            const char *cur_p = row[3] ? row[3] : "0";
-                            snprintf(entry, sizeof(entry), "{\"room_id\":%s,\"room_code\":\"%s\",\"players\":\"%s/%s\"}", room_id, room_code, cur_p, max_p);
+                            const char *status = row[3] ? row[3] : "LOBBY";
+                            const char *cur_p = row[4] ? row[4] : "0";
+                            snprintf(entry, sizeof(entry), "{\"room_id\":%s,\"room_code\":\"%s\",\"players\":\"%s/%s\",\"status\":\"%s\"}", 
+                                    room_id, room_code, cur_p, max_p, status);
                             strcat(json, entry);
                         }
                         strcat(json, "]");
@@ -496,6 +499,27 @@ void *handle_client(void *arg)
                 }
                 break;
                 
+            case JOIN_AS_VIEWER:
+                {
+                    char room_code[BUFF_SIZE];
+                    strcpy(room_code, msg.value);
+                    result = handle_join_as_viewer(cli, room_code);
+                    msg.type = result;
+                    send(conn_fd, &msg, sizeof(Message), 0);
+                    if (result == JOIN_AS_VIEWER_SUCCESS) {
+                        send_viewer_state(cli);
+                    }
+                }
+                break;
+                
+            case LEAVE_VIEWER:
+                {
+                    result = handle_leave_viewer(cli);
+                    msg.type = LEAVE_ROOM_SUCCESS;
+                    send(conn_fd, &msg, sizeof(Message), 0);
+                }
+                break;
+                
             case INVITE_USER:
                 {
                     char target_username[BUFF_SIZE];
@@ -583,7 +607,7 @@ void *handle_client(void *arg)
                             "SELECT r.room_code, r.host_user_id, r.max_players, "
                             "(SELECT GROUP_CONCAT(u.username ORDER BY rm.joined_at SEPARATOR '|') "
                             " FROM room_members rm JOIN users u ON rm.user_id = u.user_id "
-                            " WHERE rm.room_id = r.room_id AND rm.left_at IS NULL) AS members, "
+                            " WHERE rm.room_id = r.room_id AND rm.left_at IS NULL AND rm.role = 'PLAYER') AS members, "
                             "(SELECT u.username FROM users u WHERE u.user_id = r.host_user_id) AS host_name "
                             "FROM rooms r WHERE r.room_id = %d", cli->room_id);
                         
@@ -927,7 +951,7 @@ int handle_join_room(Client *cli, char room_code[BUFF_SIZE])
     mysql_free_result(res);
     
     // Kiểm tra số người trong phòng
-    sprintf(query, "SELECT COUNT(*) FROM room_members WHERE room_id = %d AND left_at IS NULL", room_id);
+    sprintf(query, "SELECT COUNT(*) FROM room_members WHERE room_id = %d AND left_at IS NULL AND role = 'PLAYER'", room_id);
     if (mysql_query(g_db_conn, query)) {
         pthread_mutex_unlock(&mutex);
         return JOIN_ROOM_FAIL;
@@ -1122,7 +1146,7 @@ int handle_leave_room(Client *cli)
     printf("[%d] Updated left_at for user_id=%d in room %d\n", cli->conn_fd, user_id, room_id);
     
     // Đếm số người còn lại trong phòng (chưa leave)
-    sprintf(query, "SELECT COUNT(*) FROM room_members WHERE room_id = %d AND left_at IS NULL", room_id);
+    sprintf(query, "SELECT COUNT(*) FROM room_members WHERE room_id = %d AND left_at IS NULL AND role = 'PLAYER'", room_id);
     int remaining_players = 0;
     if (mysql_query(g_db_conn, query) == 0) {
         res = mysql_store_result(g_db_conn);
@@ -1159,6 +1183,23 @@ int handle_leave_room(Client *cli)
             }
         }
         
+        // Gửi thông báo đến tất cả viewers trước khi đóng phòng
+        Client *tmp = head_client;
+        while (tmp != NULL) {
+            if (tmp->room_id == room_id && tmp->is_viewer) {
+                Message room_closed_msg;
+                room_closed_msg.type = ROOM_CLOSED;
+                strcpy(room_closed_msg.data_type, "string");
+                sprintf(room_closed_msg.value, "{\"type\":\"ROOM_CLOSED\",\"message\":\"All players have left. Room is closed.\"}");
+                room_closed_msg.length = strlen(room_closed_msg.value);
+                
+                int target_fd = (tmp->async_conn_fd >= 0) ? tmp->async_conn_fd : tmp->conn_fd;
+                send(target_fd, &room_closed_msg, sizeof(Message), 0);
+                printf("[%d] Sent ROOM_CLOSED to viewer %s (fd=%d)\n", cli->conn_fd, tmp->login_account, target_fd);
+            }
+            tmp = tmp->next;
+        }
+        
         // Đóng phòng
         sprintf(query, "UPDATE rooms SET status = 'CLOSED' WHERE room_id = %d", room_id);
         int close_result = mysql_query(g_db_conn, query);
@@ -1185,7 +1226,7 @@ int handle_leave_room(Client *cli)
             mysql_free_result(res);
             
             // Kiểm tra còn members nào trong phòng không (không tính host đang rời)
-            sprintf(query, "SELECT user_id FROM room_members WHERE room_id = %d AND user_id != %d AND left_at IS NULL ORDER BY joined_at LIMIT 1", 
+            sprintf(query, "SELECT user_id FROM room_members WHERE room_id = %d AND user_id != %d AND left_at IS NULL AND role = 'PLAYER' ORDER BY joined_at LIMIT 1", 
                     room_id, user_id);
             if (mysql_query(g_db_conn, query) == 0) {
                 res = mysql_store_result(g_db_conn);
@@ -1579,7 +1620,7 @@ int handle_start_game(Client *cli)
     mysql_free_result(res);
     
     // Kiểm tra số người chơi (2-4)
-    sprintf(query, "SELECT COUNT(*) FROM room_members WHERE room_id = %d AND left_at IS NULL", cli->room_id);
+    sprintf(query, "SELECT COUNT(*) FROM room_members WHERE room_id = %d AND left_at IS NULL AND role = 'PLAYER'", cli->room_id);
     if (mysql_query(g_db_conn, query)) {
         pthread_mutex_unlock(&mutex);
         return START_GAME_FAIL;
@@ -1665,7 +1706,7 @@ void broadcast_room_state(int room_id)
     
     // Lấy danh sách members trong phòng với ready state
     char query[512];
-    sprintf(query, "SELECT u.username FROM room_members rm JOIN users u ON rm.user_id = u.user_id WHERE rm.room_id = %d AND rm.left_at IS NULL ORDER BY rm.joined_at", room_id);
+    sprintf(query, "SELECT u.username FROM room_members rm JOIN users u ON rm.user_id = u.user_id WHERE rm.room_id = %d AND rm.left_at IS NULL AND rm.role = 'PLAYER' ORDER BY rm.joined_at", room_id);
     
     if (mysql_query(g_db_conn, query) == 0) {
         MYSQL_RES *res = mysql_store_result(g_db_conn);
@@ -1917,6 +1958,13 @@ void start_round1(int room_id)
         int round_id = mysql_insert_id(g_db_conn);
         printf("Created Round 1 Question %d (round_id=%d) for match %d\n", question_num, round_id, match_id);
         
+        // Update Match state
+        Match *match = find_match(room_id);
+        if (match) {
+            strcpy(match->current_state, "QUESTION");
+            match->current_round_id = round_id;
+        }
+        
         // Prepare message to broadcast
         Message msg;
         msg.type = QUESTION_START;
@@ -1954,7 +2002,7 @@ void start_round1(int room_id)
                 "COUNT(DISTINCT ra.user_id) AS answered_players "
                 "FROM rounds r "
                 "JOIN matches m ON r.match_id = m.match_id "
-                "JOIN room_members rm ON m.room_id = rm.room_id AND rm.left_at IS NULL "
+                "JOIN room_members rm ON m.room_id = rm.room_id AND rm.left_at IS NULL AND rm.role = 'PLAYER' "
                 "LEFT JOIN round_answers ra ON r.round_id = ra.round_id "
                 "WHERE r.round_id = %d", round_id);
             
@@ -2145,6 +2193,13 @@ void broadcast_question_result(int room_id, int round_id)
     
     printf("Broadcasting question result for round %d in room %d\n", round_id, room_id);
     
+    // Update Match state
+    Match *match = find_match(room_id);
+    if (match) {
+        strcpy(match->current_state, "RESULT");
+        match->current_round_id = round_id;
+    }
+    
     // Mark round as ended
     char query[2048];
     sprintf(query, "UPDATE rounds SET ended_at = NOW() WHERE round_id = %d AND ended_at IS NULL", round_id);
@@ -2177,6 +2232,7 @@ void broadcast_question_result(int room_id, int round_id)
         "JOIN rounds r ON r.round_id = %d "
         "JOIN matches m ON r.match_id = m.match_id AND m.room_id = rm.room_id "
         "LEFT JOIN round_answers ra_current ON ra_current.round_id = r.round_id AND ra_current.user_id = u.user_id "
+        "WHERE rm.role = 'PLAYER' "
         "ORDER BY total_score DESC", round_id);
     
     char result_json[BUFF_SIZE] = "{\"correct\":\"";
@@ -2217,7 +2273,11 @@ void broadcast_question_result(int room_id, int round_id)
         if (tmp->room_id == room_id && tmp->login_status == AUTH) {
             int target_fd = (tmp->async_conn_fd >= 0) ? tmp->async_conn_fd : tmp->conn_fd;
             send(target_fd, &msg, sizeof(Message), 0);
-            printf("Sent QUESTION_RESULT to %s (fd=%d)\n", tmp->login_account, target_fd);
+            printf("Sent QUESTION_RESULT to %s (fd=%d, async_fd=%d, is_viewer=%d)\n", 
+                   tmp->login_account, target_fd, tmp->async_conn_fd, tmp->is_viewer);
+        } else {
+            printf("Skipped %s (room_id=%d, need=%d, login=%d, need=%d)\n",
+                   tmp->login_account, tmp->room_id, room_id, tmp->login_status, AUTH);
         }
         tmp = tmp->next;
     }
@@ -2230,6 +2290,13 @@ void broadcast_final_ranking(int room_id, int match_id)
     // Do not lock here to avoid deadlock when caller already holds the mutex
     printf("[FINAL_RANKING] Broadcasting final ranking for match %d in room %d\n", match_id, room_id);
     
+    // Update Match state
+    Match *match = find_match(room_id);
+    if (match) {
+        strcpy(match->current_state, "RANKING");
+        match->current_round_id = 0;  // No active round during ranking
+    }
+    
     // Get total scores for ALL players in this match (including those who left)
     char query[2048];
     sprintf(query, 
@@ -2239,6 +2306,7 @@ void broadcast_final_ranking(int room_id, int match_id)
         "JOIN matches m ON m.match_id = %d AND m.room_id = rm.room_id "
         "LEFT JOIN rounds r ON r.match_id = m.match_id "
         "LEFT JOIN round_answers ra ON ra.round_id = r.round_id AND ra.user_id = u.user_id "
+        "WHERE rm.role = 'PLAYER' "
         "GROUP BY u.username, rm.left_at "
         "ORDER BY total_score DESC", match_id);
     
@@ -2291,7 +2359,11 @@ void broadcast_final_ranking(int room_id, int match_id)
         if (tmp->room_id == room_id && tmp->login_status == AUTH) {
             int target_fd = (tmp->async_conn_fd >= 0) ? tmp->async_conn_fd : tmp->conn_fd;
             send(target_fd, &msg, sizeof(Message), 0);
-            printf("Sent GAME_END (Final Ranking) to %s (fd=%d)\n", tmp->login_account, target_fd);
+            printf("Sent GAME_END (Final Ranking) to %s (fd=%d, async_fd=%d, is_viewer=%d)\n", 
+                   tmp->login_account, target_fd, tmp->async_conn_fd, tmp->is_viewer);
+        } else {
+            printf("Skipped %s for GAME_END (room_id=%d vs %d, login=%d)\n",
+                   tmp->login_account, tmp->room_id, room_id, tmp->login_status);
         }
         tmp = tmp->next;
     }
@@ -2354,6 +2426,14 @@ void start_round2(int room_id, int match_id)
     int round_id = mysql_insert_id(g_db_conn);
     printf("Created Round 2 (round_id=%d) for match %d\n", round_id, match_id);
     
+    // Update Match state
+    Match *match = find_match(room_id);
+    if (match) {
+        strcpy(match->current_state, "ROUND2");
+        match->current_round_id = round_id;
+        match->current_round = 2;
+    }
+    
     // Link product to round
     sprintf(query, 
         "INSERT INTO round_products (round_id, product_id, display_order) "
@@ -2377,7 +2457,11 @@ void start_round2(int room_id, int match_id)
         if (tmp->room_id == room_id && tmp->login_status == AUTH) {
             int target_fd = (tmp->async_conn_fd >= 0) ? tmp->async_conn_fd : tmp->conn_fd;
             send(target_fd, &msg, sizeof(Message), 0);
-            printf("Sent ROUND_START (V2) to %s (fd=%d)\n", tmp->login_account, target_fd);
+            printf("Sent ROUND_START (V2) to %s (fd=%d, async_fd=%d, is_viewer=%d)\n", 
+                   tmp->login_account, target_fd, tmp->async_conn_fd, tmp->is_viewer);
+        } else {
+            printf("Skipped %s for ROUND_START V2 (room_id=%d vs %d, login=%d)\n",
+                   tmp->login_account, tmp->room_id, room_id, tmp->login_status);
         }
         tmp = tmp->next;
     }
@@ -2398,7 +2482,7 @@ void start_round2(int room_id, int match_id)
             "COUNT(DISTINCT ra.user_id) AS answered_players "
             "FROM rounds r "
             "JOIN matches m ON r.match_id = m.match_id "
-            "JOIN room_members rm ON m.room_id = rm.room_id AND rm.left_at IS NULL "
+            "JOIN room_members rm ON m.room_id = rm.room_id AND rm.left_at IS NULL AND rm.role = 'PLAYER' "
             "LEFT JOIN round_answers ra ON r.round_id = ra.round_id "
             "WHERE r.round_id = %d", round_id);
         
@@ -2592,6 +2676,13 @@ void broadcast_round2_result(int room_id, int round_id)
     
     printf("Broadcasting Round 2 result for round %d in room %d\n", round_id, room_id);
     
+    // Update Match state
+    Match *match = find_match(room_id);
+    if (match) {
+        strcpy(match->current_state, "ROUND2_RESULT");
+        match->current_round_id = round_id;
+    }
+    
     // Mark round as ended
     char query[2048];
     sprintf(query, "UPDATE rounds SET ended_at = NOW() WHERE round_id = %d AND ended_at IS NULL", 
@@ -2634,6 +2725,7 @@ void broadcast_round2_result(int room_id, int round_id)
         "JOIN rounds r ON r.round_id = %d "
         "JOIN matches m ON r.match_id = m.match_id AND m.room_id = rm.room_id "
         "LEFT JOIN round_answers ra_current ON ra_current.round_id = r.round_id AND ra_current.user_id = u.user_id "
+        "WHERE rm.role = 'PLAYER' "
         "ORDER BY total_score DESC", round_id);
     
     char result_json[BUFF_SIZE];
@@ -2674,7 +2766,11 @@ void broadcast_round2_result(int room_id, int round_id)
         if (tmp->room_id == room_id && tmp->login_status == AUTH) {
             int target_fd = (tmp->async_conn_fd >= 0) ? tmp->async_conn_fd : tmp->conn_fd;
             send(target_fd, &msg, sizeof(Message), 0);
-            printf("Sent ROUND_RESULT to %s (fd=%d)\n", tmp->login_account, target_fd);
+            printf("Sent ROUND_RESULT (V2) to %s (fd=%d, async_fd=%d, is_viewer=%d)\n", 
+                   tmp->login_account, target_fd, tmp->async_conn_fd, tmp->is_viewer);
+        } else {
+            printf("Skipped %s for ROUND_RESULT V2 (room_id=%d vs %d, login=%d)\n",
+                   tmp->login_account, tmp->room_id, room_id, tmp->login_status);
         }
         tmp = tmp->next;
     }
@@ -2692,6 +2788,7 @@ void start_round3(int room_id) {
         // Cập nhật current_round trong Match
         m->current_round = 3;
         m->current_turn_index = 0;
+        strcpy(m->current_state, "ROUND3");  // Update state
         
         // Tìm người chơi đầu tiên chưa rời để bắt đầu lượt
         while (m->current_turn_index < m->count_players && m->has_left[m->current_turn_index]) {
@@ -2764,12 +2861,14 @@ void create_match_in_memory(int room_id) {
     // Bắt đầu từ vòng 1
     new_m->current_round = 1; 
     new_m->current_turn_index = 0;
+    strcpy(new_m->current_state, "INIT");  // Initialize state
+    new_m->current_round_id = 0;  // No active round yet
     new_m->next = head_match;
     head_match = new_m;
 
     // Load TẤT CẢ players from DB (kể cả người đã rời) theo thứ tự tham gia
     char query[1024];
-    sprintf(query, "SELECT u.user_id, u.username, rm.left_at FROM room_members rm JOIN users u ON rm.user_id = u.user_id WHERE rm.room_id = %d ORDER BY rm.joined_at ASC", room_id);
+    sprintf(query, "SELECT u.user_id, u.username, rm.left_at FROM room_members rm JOIN users u ON rm.user_id = u.user_id WHERE rm.room_id = %d AND rm.role = 'PLAYER' ORDER BY rm.joined_at ASC", room_id);
     
     if (mysql_query(g_db_conn, query) == 0) {
         MYSQL_RES *res = mysql_store_result(g_db_conn);
@@ -2808,12 +2907,17 @@ void broadcast_match_json(Match *m, const char *json_data, int type) {
     msg.value[sizeof(msg.value) - 1] = '\0';
 
     while (tmp != NULL) {
-        if (tmp->room_id == m->room_id) {
+        if (tmp->room_id == m->room_id && tmp->login_status == AUTH) {
             // Ưu tiên gửi qua Async socket, nếu không có thì gửi qua socket chính
             int target_fd = (tmp->async_conn_fd > 0) ? tmp->async_conn_fd : tmp->conn_fd;
             if (target_fd > 0) {
                 send(target_fd, &msg, sizeof(Message), 0);
+                printf("Sent ROUND3 msg (type=%d) to %s (fd=%d, async_fd=%d, is_viewer=%d)\n", 
+                       type, tmp->login_account, target_fd, tmp->async_conn_fd, tmp->is_viewer);
             }
+        } else {
+            printf("Skipped %s for ROUND3 (room_id=%d vs %d, login=%d)\n",
+                   tmp->login_account, tmp->room_id, m->room_id, tmp->login_status);
         }
         tmp = tmp->next;
     }
@@ -2982,4 +3086,443 @@ void handle_round_3_move(Client *cli, char *json_input) {
     }
 
     pthread_mutex_unlock(&mutex);
+}
+
+// ==================== VIEWER FUNCTIONS ====================
+
+int handle_join_as_viewer(Client *cli, char room_code[BUFF_SIZE]) {
+    if (!cli) return JOIN_AS_VIEWER_FAIL;
+    
+    pthread_mutex_lock(&mutex);
+    
+    // Tìm room theo room_code
+    char query[512];
+    sprintf(query, "SELECT room_id, status FROM rooms WHERE room_code = '%s'", room_code);
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        pthread_mutex_unlock(&mutex);
+        return JOIN_AS_VIEWER_FAIL;
+    }
+    
+    MYSQL_RES *res = mysql_store_result(g_db_conn);
+    if (!res || mysql_num_rows(res) == 0) {
+        if (res) mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return JOIN_AS_VIEWER_FAIL;
+    }
+    
+    MYSQL_ROW row = mysql_fetch_row(res);
+    int room_id = atoi(row[0]);
+    char *status = row[1];
+    mysql_free_result(res);
+    
+    // Chỉ cho phép xem nếu phòng đang PLAYING
+    if (strcmp(status, "PLAYING") != 0) {
+        pthread_mutex_unlock(&mutex);
+        return JOIN_AS_VIEWER_FAIL;
+    }
+    
+    // Lấy user_id từ username
+    int user_id = db_get_user_id_by_username(cli->login_account);
+    if (user_id < 0) {
+        printf("[VIEWER] Failed to get user_id for %s\n", cli->login_account);
+        pthread_mutex_unlock(&mutex);
+        return JOIN_AS_VIEWER_FAIL;
+    }
+    
+    // Lưu viewer vào database
+    if (db_add_viewer_to_room(room_id, user_id) != 0) {
+        printf("[VIEWER] Failed to add viewer to database\n");
+        pthread_mutex_unlock(&mutex);
+        return JOIN_AS_VIEWER_FAIL;
+    }
+    
+    // Set viewer mode
+    cli->room_id = room_id;
+    cli->is_viewer = 1;
+    cli->is_ready = 0;
+    
+    printf("[VIEWER] User %s (user_id=%d) joined room %d as viewer\n", cli->login_account, user_id, room_id);
+    
+    pthread_mutex_unlock(&mutex);
+    
+    // Send game state sync to viewer after successful join
+    send_game_state_sync(cli, room_id);
+    
+    return JOIN_AS_VIEWER_SUCCESS;
+}
+
+int handle_leave_viewer(Client *cli) {
+    if (!cli || !cli->is_viewer) return LEAVE_ROOM_SUCCESS;
+    
+    pthread_mutex_lock(&mutex);
+    
+    // Lấy user_id từ username
+    int user_id = db_get_user_id_by_username(cli->login_account);
+    if (user_id >= 0 && cli->room_id > 0) {
+        // Cập nhật left_at trong database
+        if (db_remove_viewer_from_room(cli->room_id, user_id) != 0) {
+            printf("[VIEWER] Failed to update left_at for viewer in database\n");
+        }
+    }
+    
+    printf("[VIEWER] User %s left viewer mode from room %d\n", cli->login_account, cli->room_id);
+    
+    cli->room_id = 0;
+    cli->is_viewer = 0;
+    
+    pthread_mutex_unlock(&mutex);
+    return LEAVE_ROOM_SUCCESS;
+}
+
+void send_viewer_state(Client *cli) {
+    if (!cli || !cli->is_viewer || cli->room_id <= 0) return;
+    
+    pthread_mutex_lock(&mutex);
+    
+    // Lấy thông tin room hiện tại
+    char query[1024];
+    sprintf(query, 
+        "SELECT r.current_round, r.status, GROUP_CONCAT(u.username ORDER BY rm.joined_at SEPARATOR '|') "
+        "FROM rooms r "
+        "LEFT JOIN room_members rm ON r.room_id = rm.room_id AND rm.left_at IS NULL "
+        "LEFT JOIN users u ON rm.user_id = u.user_id "
+        "WHERE r.room_id = %d "
+        "GROUP BY r.room_id", cli->room_id);
+    
+    printf("[VIEWER] Querying room info for viewer %s in room %d\n", cli->login_account, cli->room_id);
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        printf("[VIEWER] Query failed: %s\n", mysql_error(g_db_conn));
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
+    
+    MYSQL_RES *res = mysql_store_result(g_db_conn);
+    if (!res || mysql_num_rows(res) == 0) {
+        if (res) mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
+    
+    MYSQL_ROW row = mysql_fetch_row(res);
+    int current_round = row[0] ? atoi(row[0]) : 0;
+    char *status = row[1];
+    char *members = row[2] ? row[2] : "";
+    
+    // Lấy điểm số từ match
+    Match *m = find_match(cli->room_id);
+    char scores_json[BUFF_SIZE] = "[";
+    
+    if (m) {
+        for (int i = 0; i < m->count_players; i++) {
+            char entry[256];
+            int total_score = m->r1_scores[i] + m->r2_scores[i] + m->r3_scores[i];
+            sprintf(entry, "{\"name\":\"%s\",\"r1\":%d,\"r2\":%d,\"r3\":%d,\"total\":%d,\"left\":%s}",
+                   m->player_names[i], m->r1_scores[i], m->r2_scores[i], m->r3_scores[i], 
+                   total_score, m->has_left[i] ? "true" : "false");
+            strcat(scores_json, entry);
+            if (i < m->count_players - 1) strcat(scores_json, ",");
+        }
+    }
+    strcat(scores_json, "]");
+    
+    // Gửi state cho viewer
+    char json_state[BUFF_SIZE * 2];
+    sprintf(json_state, "{\"room_id\":%d,\"current_round\":%d,\"status\":\"%s\",\"members\":\"%s\",\"scores\":%s}",
+           cli->room_id, current_round, status, members, scores_json);
+    
+    Message msg;
+    msg.type = VIEWER_STATE_UPDATE;
+    strcpy(msg.data_type, "string");
+    msg.length = strlen(json_state);
+    strncpy(msg.value, json_state, BUFF_SIZE - 1);
+    msg.value[BUFF_SIZE - 1] = '\0';
+    
+    int target_fd = (cli->async_conn_fd >= 0) ? cli->async_conn_fd : cli->conn_fd;
+    send(target_fd, &msg, sizeof(Message), 0);
+    
+    printf("[VIEWER] Sent state to %s: %s\n", cli->login_account, json_state);
+    
+    mysql_free_result(res);
+    pthread_mutex_unlock(&mutex);
+}
+
+// Send complete game state to viewer when they join
+void send_game_state_sync(Client *cli, int room_id) {
+    if (!cli) return;
+    
+    pthread_mutex_lock(&mutex);
+    
+    // Get Match struct to check current state
+    Match *match = find_match(room_id);
+    char *current_state = (match && strlen(match->current_state) > 0) ? match->current_state : "UNKNOWN";
+    int current_round_id = match ? match->current_round_id : 0;
+    
+    printf("[VIEWER_SYNC] Match state: %s, round_id: %d\n", current_state, current_round_id);
+    
+    char query[2048];
+    char json_data[BUFF_SIZE * 2];
+    
+    // 1. Get current match and round info
+    // If state is RESULT, we need to get the ENDED round (last completed question)
+    // Otherwise, get active round (ended_at IS NULL)
+    if (strcmp(current_state, "RESULT") == 0 || strcmp(current_state, "ROUND2_RESULT") == 0) {
+        // Get the most recently ended round for result display
+        sprintf(query, 
+            "SELECT m.match_id, m.current_round, r.round_id, r.round_type, r.question_id, "
+            "r.time_limit_sec, r.threshold_pct, p.product_id, p.name, p.description, p.image_url, p.base_price, "
+            "r.started_at "
+            "FROM matches m "
+            "LEFT JOIN rounds r ON m.match_id = r.match_id AND r.ended_at IS NOT NULL "
+            "LEFT JOIN round_products rp ON r.round_id = rp.round_id "
+            "LEFT JOIN products p ON rp.product_id = p.product_id "
+            "WHERE m.room_id = %d AND m.ended_at IS NULL "
+            "ORDER BY r.ended_at DESC "
+            "LIMIT 1", room_id);
+    } else {
+        // Get active round (not ended yet) with started_at to calculate remaining time
+        sprintf(query, 
+            "SELECT m.match_id, m.current_round, r.round_id, r.round_type, r.question_id, "
+            "r.time_limit_sec, r.threshold_pct, p.product_id, p.name, p.description, p.image_url, p.base_price, "
+            "TIMESTAMPDIFF(SECOND, r.started_at, NOW()) as elapsed_seconds "
+            "FROM matches m "
+            "LEFT JOIN rounds r ON m.match_id = r.match_id AND r.ended_at IS NULL "
+            "LEFT JOIN round_products rp ON r.round_id = rp.round_id "
+            "LEFT JOIN products p ON rp.product_id = p.product_id "
+            "WHERE m.room_id = %d AND m.ended_at IS NULL "
+            "LIMIT 1", room_id);
+    }
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
+    
+    MYSQL_RES *res = mysql_store_result(g_db_conn);
+    if (!res || mysql_num_rows(res) == 0) {
+        if (res) mysql_free_result(res);
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
+    
+    MYSQL_ROW row = mysql_fetch_row(res);
+    int match_id = atoi(row[0]);
+    int current_round = atoi(row[1]);
+    int round_id = row[2] ? atoi(row[2]) : 0;
+    char *round_type = row[3] ? row[3] : "UNKNOWN";
+    int question_id = row[4] ? atoi(row[4]) : 0;
+    int time_limit = row[5] ? atoi(row[5]) : 15;
+    float threshold = row[6] ? atof(row[6]) : 0.0;
+    
+    // Product info (for Round 2)
+    int product_id = row[7] ? atoi(row[7]) : 0;
+    char product_name[256] = "";
+    char product_desc[512] = "";
+    char product_image[512] = "";
+    int product_price = row[11] ? atoi(row[11]) : 0;
+    
+    if (row[8]) strncpy(product_name, row[8], sizeof(product_name) - 1);
+    if (row[9]) strncpy(product_desc, row[9], sizeof(product_desc) - 1);
+    if (row[10]) strncpy(product_image, row[10], sizeof(product_image) - 1);
+    
+    // Calculate remaining time (only for active rounds, not for RESULT state)
+    int elapsed_seconds = row[12] ? atoi(row[12]) : 0;
+    int time_remaining = time_limit - elapsed_seconds;
+    if (time_remaining < 0) time_remaining = 0;
+    
+    printf("[VIEWER_SYNC] Round info: time_limit=%d, elapsed=%d, remaining=%d\n", 
+           time_limit, elapsed_seconds, time_remaining);
+    
+    mysql_free_result(res);
+    
+    // 2. Get all player scores
+    sprintf(query,
+        "SELECT u.username, COALESCE(SUM(ra.score_awarded), 0) as total_score "
+        "FROM room_members rm "
+        "JOIN users u ON rm.user_id = u.user_id "
+        "LEFT JOIN round_answers ra ON ra.user_id = rm.user_id AND ra.round_id IN "
+        "(SELECT round_id FROM rounds WHERE match_id = %d) "
+        "WHERE rm.room_id = %d AND rm.left_at IS NULL AND rm.role = 'PLAYER' "
+        "GROUP BY u.username, rm.user_id "
+        "ORDER BY total_score DESC", match_id, room_id);
+    
+    if (mysql_query(g_db_conn, query) != 0) {
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
+    
+    res = mysql_store_result(g_db_conn);
+    char players_json[1024] = "[";
+    int first = 1;
+    
+    while ((row = mysql_fetch_row(res)) != NULL) {
+        if (!first) strcat(players_json, ",");
+        char temp[128];
+        sprintf(temp, "{\"username\":\"%s\",\"total_score\":%s}", row[0], row[1]);
+        strcat(players_json, temp);
+        first = 0;
+    }
+    strcat(players_json, "]");
+    mysql_free_result(res);
+    
+    // 3. Build sync message based on current state (from Match struct)
+    if (strcmp(current_state, "QUESTION") == 0 && strcmp(round_type, "ROUND1") == 0 && question_id > 0) {
+        // Round 1: Currently showing question
+        sprintf(query, "SELECT question_text, option_a, option_b, option_c, option_d FROM questions WHERE question_id = %d", question_id);
+        if (mysql_query(g_db_conn, query) == 0) {
+            res = mysql_store_result(g_db_conn);
+            if (res && (row = mysql_fetch_row(res)) != NULL) {
+                snprintf(json_data, sizeof(json_data),
+                    "{\"type\":\"VIEWER_SYNC\",\"state\":\"QUESTION\",\"round\":%d,\"round_type\":\"ROUND1\","
+                    "\"round_id\":%d,\"question_id\":%d,\"question\":\"%s\","
+                    "\"optionA\":\"%s\",\"optionB\":\"%s\",\"optionC\":\"%s\",\"optionD\":\"%s\","
+                    "\"time_limit\":%d,\"time_remaining\":%d,\"players\":%s}",
+                    current_round, round_id, question_id, row[0], row[1], row[2], row[3], row[4],
+                    time_limit, time_remaining, players_json);
+                
+                mysql_free_result(res);
+            }
+        }
+    } else if (strcmp(current_state, "RESULT") == 0) {
+        // Round 1: Currently showing question result
+        // Get question details and correct answer from the last ended round
+        sprintf(query, 
+            "SELECT q.question_text, q.option_a, q.option_b, q.option_c, q.option_d, q.correct_answer, r.round_id "
+            "FROM rounds r "
+            "JOIN questions q ON r.question_id = q.question_id "
+            "WHERE r.match_id = %d AND r.round_type = 'ROUND1' AND r.ended_at IS NOT NULL "
+            "ORDER BY r.round_id DESC LIMIT 1", match_id);
+        
+        char correct_answer[10] = "";
+        int result_round_id = current_round_id;
+        char question_text[512] = "";
+        char opt_a[256] = "", opt_b[256] = "", opt_c[256] = "", opt_d[256] = "";
+        
+        if (mysql_query(g_db_conn, query) == 0) {
+            res = mysql_store_result(g_db_conn);
+            if (res && (row = mysql_fetch_row(res)) != NULL) {
+                strncpy(question_text, row[0], sizeof(question_text) - 1);
+                strncpy(opt_a, row[1], sizeof(opt_a) - 1);
+                strncpy(opt_b, row[2], sizeof(opt_b) - 1);
+                strncpy(opt_c, row[3], sizeof(opt_c) - 1);
+                strncpy(opt_d, row[4], sizeof(opt_d) - 1);
+                strcpy(correct_answer, row[5]);
+                result_round_id = atoi(row[6]);
+            }
+            mysql_free_result(res);
+        }
+        
+        // Get players with is_correct info for this specific round
+        sprintf(query,
+            "SELECT u.username, "
+            "COALESCE((SELECT SUM(ra.score_awarded) FROM rounds r2 JOIN round_answers ra ON ra.round_id = r2.round_id "
+            "WHERE r2.match_id = %d AND ra.user_id = u.user_id), 0) AS total_score, "
+            "COALESCE(ra_current.is_correct, 0) AS is_correct "
+            "FROM room_members rm "
+            "JOIN users u ON rm.user_id = u.user_id "
+            "LEFT JOIN round_answers ra_current ON ra_current.round_id = %d AND ra_current.user_id = u.user_id "
+            "WHERE rm.room_id = %d AND rm.left_at IS NULL AND rm.role = 'PLAYER' "
+            "ORDER BY total_score DESC", match_id, result_round_id, room_id);
+        
+        char result_players_json[1024] = "[";
+        first = 1;
+        if (mysql_query(g_db_conn, query) == 0) {
+            res = mysql_store_result(g_db_conn);
+            while ((row = mysql_fetch_row(res)) != NULL) {
+                if (!first) strcat(result_players_json, ",");
+                char temp[128];
+                sprintf(temp, "{\"username\":\"%s\",\"score\":%s,\"is_correct\":%s}", 
+                        row[0], row[1], row[2]);
+                strcat(result_players_json, temp);
+                first = 0;
+            }
+            mysql_free_result(res);
+        }
+        strcat(result_players_json, "]");
+        
+        snprintf(json_data, sizeof(json_data),
+            "{\"type\":\"VIEWER_SYNC\",\"state\":\"RESULT\",\"round\":%d,\"round_type\":\"ROUND1\","
+            "\"round_id\":%d,\"question\":\"%s\",\"optionA\":\"%s\",\"optionB\":\"%s\","
+            "\"optionC\":\"%s\",\"optionD\":\"%s\",\"correct_answer\":\"%s\",\"players\":%s}",
+            current_round, result_round_id, question_text, opt_a, opt_b, opt_c, opt_d, 
+            correct_answer, result_players_json);
+    } else if (strcmp(current_state, "ROUND2") == 0 && product_id > 0) {
+        // Round 2: Currently showing product
+        snprintf(json_data, sizeof(json_data),
+            "{\"type\":\"VIEWER_SYNC\",\"state\":\"ROUND2\",\"round\":%d,\"round_type\":\"%s\","
+            "\"round_id\":%d,\"product_id\":%d,\"product_name\":\"%s\","
+            "\"product_desc\":\"%s\",\"product_image\":\"%s\",\"product_price\":%d,"
+            "\"threshold\":%.2f,\"time_limit\":%d,\"time_remaining\":%d,\"players\":%s}",
+            current_round, round_type, round_id, product_id, product_name,
+            product_desc, product_image, product_price, threshold, time_limit, time_remaining, players_json);
+    } else if (strcmp(current_state, "ROUND2_RESULT") == 0) {
+        // Round 2: Currently showing result
+        // Get product details and player scores with is_correct for this round
+        sprintf(query,
+            "SELECT u.username, "
+            "COALESCE((SELECT SUM(ra.score_awarded) FROM rounds r2 JOIN round_answers ra ON ra.round_id = r2.round_id "
+            "WHERE r2.match_id = %d AND ra.user_id = u.user_id), 0) AS total_score, "
+            "COALESCE(ra_current.answer_price, 0) AS guessed_price, "
+            "COALESCE(ra_current.is_correct, 0) AS is_correct "
+            "FROM room_members rm "
+            "JOIN users u ON rm.user_id = u.user_id "
+            "LEFT JOIN round_answers ra_current ON ra_current.round_id = %d AND ra_current.user_id = u.user_id "
+            "WHERE rm.room_id = %d AND rm.left_at IS NULL AND rm.role = 'PLAYER' "
+            "ORDER BY total_score DESC", match_id, current_round_id, room_id);
+        
+        char result_players_json[2048] = "[";
+        first = 1;
+        if (mysql_query(g_db_conn, query) == 0) {
+            res = mysql_store_result(g_db_conn);
+            while ((row = mysql_fetch_row(res)) != NULL) {
+                if (!first) strcat(result_players_json, ",");
+                char temp[256];
+                sprintf(temp, "{\"username\":\"%s\",\"score\":%s,\"guessed_price\":%s,\"is_correct\":%s}", 
+                        row[0], row[1], row[2], row[3]);
+                strcat(result_players_json, temp);
+                first = 0;
+            }
+            mysql_free_result(res);
+        }
+        strcat(result_players_json, "]");
+        
+        snprintf(json_data, sizeof(json_data),
+            "{\"type\":\"VIEWER_SYNC\",\"state\":\"ROUND2_RESULT\",\"round\":%d,\"round_type\":\"ROUND2_RESULT\","
+            "\"round_id\":%d,\"product_id\":%d,\"product_name\":\"%s\",\"product_desc\":\"%s\","
+            "\"product_image\":\"%s\",\"product_price\":%d,\"threshold\":%.2f,\"players\":%s}",
+            current_round, current_round_id, product_id, product_name, product_desc,
+            product_image, product_price, threshold, result_players_json);
+    } else if (strcmp(current_state, "ROUND3") == 0) {
+        // Round 3: Just send player scores and round type
+        snprintf(json_data, sizeof(json_data),
+            "{\"type\":\"VIEWER_SYNC\",\"state\":\"ROUND3\",\"round\":%d,\"round_type\":\"V3\","
+            "\"round_id\":%d,\"players\":%s}",
+            current_round, round_id, players_json);
+    } else if (strcmp(current_state, "RANKING") == 0) {
+        // Currently in ranking page between rounds
+        snprintf(json_data, sizeof(json_data),
+            "{\"type\":\"VIEWER_SYNC\",\"state\":\"RANKING\",\"round\":%d,\"round_type\":\"RANKING\","
+            "\"players\":%s}",
+            current_round, players_json);
+    } else {
+        // Fallback: Unknown state - send current_round and player scores
+        snprintf(json_data, sizeof(json_data),
+            "{\"type\":\"VIEWER_SYNC\",\"state\":\"UNKNOWN\",\"round\":%d,\"round_type\":\"RANKING\","
+            "\"players\":%s}",
+            current_round, players_json);
+    }
+    
+    pthread_mutex_unlock(&mutex);
+    
+    // Send VIEWER_SYNC message
+    Message sync_msg;
+    sync_msg.type = VIEWER_SYNC;
+    strncpy(sync_msg.value, json_data, BUFF_SIZE - 1);
+    sync_msg.value[BUFF_SIZE - 1] = '\0';
+    
+    int target_fd = (cli->async_conn_fd >= 0) ? cli->async_conn_fd : cli->conn_fd;
+    send(target_fd, &sync_msg, sizeof(Message), 0);
+    
+    printf("[VIEWER_SYNC] Sent game state to %s: %s\n", cli->login_account, json_data);
 }

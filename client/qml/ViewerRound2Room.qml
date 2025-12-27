@@ -3,310 +3,227 @@ import QtQuick.Controls 2.12
 import QtQuick.Layouts 1.3
 
 Page {
-    id: round2Room
+    id: viewerRound2Room
     width: 800
     height: 600
     
     property var backend: null
+    property string roomCode: ""
+    property string initialState: "QUESTION"  // Can be "QUESTION" or "RESULT"
     property int round2Id: 0
     property string productName: ""
     property string productDesc: ""
     property string productImage: ""
     property int thresholdPct: 10
-    property int timeLimit: 20
     property int timeRemaining: 20
-    property int guessedPrice: 0
-    property bool priceSubmitted: false
     property int actualPrice: 0
     property bool showResult: false
     property var playerScores: []
-    property bool round2Started: false  // Track xem round 2 đã bắt đầu hay chưa
-    property bool isNavigatingAway: false  // Flag để ngăn xử lý messages sau khi navigate
+    property bool justJoinedDuringResult: false  // Flag to track if viewer joined during result phase
+    property string pendingRankingData: ""  // Store ranking data during delay
     
-    // Nhận parameters từ navigation
-    property int roundId: 0
-    property string roundType: ""
-    property string prodName: ""
-    property string prodDesc: ""
-    property int threshold: 10
-    property int timeLimit_: 20
-    
-    // Timer để delay push RankingPage
+    // Timer để hiển thị result trước khi chuyển ranking (giống player)
     Timer {
-        id: rankingDelayTimer
-        interval: 500
-        running: false
+        id: resultDisplayTimer
+        interval: 3000  // 3 giây hiển thị kết quả
+        repeat: false
         onTriggered: {
-            // Thêm rank vào playerScores trước khi push
-            var rankedPlayers = [];
-            if (playerScores && playerScores.length > 0) {
-                // Sort by score descending
-                var sortedPlayers = playerScores.slice().sort(function(a, b) {
-                    return (b.score || 0) - (a.score || 0);
-                });
-                // Thêm rank
-                for (var i = 0; i < sortedPlayers.length; i++) {
-                    sortedPlayers[i].rank = i + 1;
-                }
-                rankedPlayers = sortedPlayers;
-            }
-            
-            console.log("Ranked players (after delay):", JSON.stringify(rankedPlayers));
-            
-            // Replace to RankingPage - clear navigation history
-            stackView.replace("qrc:/qml/RankingPage.qml", {
-                backend: backend,
-                rankings: rankedPlayers,
-                roundNumber: 2
-            });
+            console.log("[VIEWER R2] Result display timeout, showing ranking");
+            rankingDelayTimer.start();
         }
     }
     
-    // Timer để tự động chuyển sang ranking sau khi hiển thị kết quả
+    // Timer để delay nhỏ trước khi push ranking
     Timer {
-        id: resultDisplayTimer
-        interval: 3000  // Hiển thị kết quả 3 giây rồi push RankingPage
-        running: false
+        id: rankingDelayTimer
+        interval: 500  // 0.5 giây delay (giống player)
+        repeat: false
         onTriggered: {
-            console.log("Round2Room: Result display timeout - pushing to RankingPage");
-            rankingDelayTimer.running = true;
+            console.log("[VIEWER R2] Timer expired, navigating to ranking");
+            showRankingPage();
         }
+    }
+    
+    function showRankingPage() {
+        console.log("[VIEWER R2] showRankingPage called");
+        var players = [];
+        
+        // Try to use pendingRankingData first, otherwise use current playerScores
+        if (pendingRankingData) {
+            try {
+                var data = JSON.parse(pendingRankingData);
+                players = data.players || [];
+                console.log("[VIEWER R2] Using pending ranking data with", players.length, "players");
+            } catch (e) {
+                console.error("[VIEWER R2] Failed to parse pending ranking data:", e);
+                players = playerScores;
+            }
+        } else {
+            players = playerScores;
+            console.log("[VIEWER R2] Using current playerScores with", players.length, "players");
+        }
+        
+        // Sort and add rank
+        var sortedPlayers = players.slice().sort(function(a, b) {
+            return (b.total_score || b.score || 0) - (a.total_score || a.score || 0);
+        });
+        for (var i = 0; i < sortedPlayers.length; i++) {
+            sortedPlayers[i].rank = i + 1;
+        }
+        
+        stackView.replace("qrc:/qml/RankingPage.qml", { 
+            backend: backend,
+            rankings: sortedPlayers,
+            roundNumber: 2,
+            isViewer: true,
+            roomCode: roomCode
+        });
     }
     
     Component.onCompleted: {
-        console.log("Round2Room loaded, backend:", backend);
-        console.log("Navigation params - roundId:", roundId, "prodName:", prodName, "prodDesc:", prodDesc);
+        console.log("ViewerRound2Room loaded for room:", roomCode);
+        console.log("[VIEWER R2] initialState:", initialState);
+        console.log("[VIEWER R2] showResult:", showResult);
+        console.log("[VIEWER R2] actualPrice:", actualPrice);
+        console.log("[VIEWER R2] timeRemaining:", timeRemaining);
         
-        // Nếu có parameters từ navigation, sử dụng ngay
-        if (roundId > 0 && prodName.length > 0) {
-            console.log("Using navigation parameters");
-            round2Id = roundId;
-            productName = prodName;
-            productDesc = prodDesc;
-            thresholdPct = threshold;
-            timeLimit = timeLimit_;
-            timeRemaining = timeLimit_;
-            priceSubmitted = false;
-            showResult = false;
+        // If viewer joined during result phase, start timer to show ranking
+        if (initialState === "RESULT" && showResult) {
+            justJoinedDuringResult = true;
+            console.log("[VIEWER R2] Joined during RESULT phase, starting timer");
+            resultDisplayTimer.start();  // Start 3 second timer to match player experience
+        } else if (initialState === "QUESTION" && timeRemaining > 0) {
+            // If viewer joined during active question/product display, start countdown
+            console.log("[VIEWER R2] Joined during QUESTION phase, starting countdown with", timeRemaining, "seconds");
             if (backend) {
-                backend.startCountdown(timeLimit_);
+                backend.startCountdown(timeRemaining);
             }
-        }
-        
-        if (!backend) {
-            console.error("Backend is null!");
         }
     }
     
-    Component.onDestruction: {
-        // Stop timer when page is destroyed
-        if (backend) {
-            backend.stopCountdown();
-            console.log("Round2Room destroyed, timer stopped");
-        }
-    }
-    
-    function handleGameEnd(rankingData) {
-        // Guard: Nếu đang navigate away, bỏ qua
-        if (isNavigatingAway) {
-            console.log("Round2Room: Ignoring GAME_END because navigating away");
-            return;
-        }
+    Connections {
+        target: backend
+        enabled: viewerRound2Room.StackView.status === StackView.Active
         
-        console.log("=== GAME END received in Round2Room ===" );
-        console.log("Ranking data:", rankingData);
-        try {
-            var data = JSON.parse(rankingData);
-            console.log("Parsed ranking data, players count:", data.players ? data.players.length : 0);
+        function onRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit_, imageUrl) {
+            console.log("[VIEWER R2] ROUND_START received - Round:", roundId, "Type:", roundType);
             
-            // Tắt timer
-            if (backend) {
-                backend.stopCountdown();
-            }
-            
-            // Replace (không push) sang RankingPage final với tổng điểm cả 3 vòng
-            stackView.replace("qrc:/qml/RankingPage.qml", { 
-                backend: backend,
-                rankings: data.players || [],
-                roundNumber: 3,
-                isFinalRanking: true
-            });
-        } catch (e) {
-            console.error("Round2Room - Failed to parse GAME_END data:", e);
-        }
-    }
-    
-    function handleRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit_, imageUrl) {
-        console.log("=== handleRoundStart called ===");
-        console.log("Round:", roundId, "Type:", roundType);
-        console.log("round2Started:", round2Started);
-        
-        // Nếu Round 2 chưa bắt đầu -> khởi động Round 2
-        if (!round2Started) {
-            console.log("=== Round 2 Start ===");
-            console.log("Product:", prodName, "-", prodDesc);
-            console.log("Threshold:", threshold, "% Time:", timeLimit_, "s");
-            
-            // Stop timer
-            if (backend) {
-                backend.stopCountdown();
-            }
-            
-            // Update Round 2 data
+            // This should be Round 2 start
+            console.log("[VIEWER R2] Round 2 started:", prodName);
             round2Id = roundId;
             productName = prodName;
             productDesc = prodDesc;
             productImage = imageUrl || "";
             thresholdPct = threshold;
-            timeLimit = timeLimit_;
             timeRemaining = timeLimit_;
-            round2Started = true;
-            
-            // Reset state
-            guessedPrice = 0;
-            priceSubmitted = false;
             showResult = false;
             actualPrice = 0;
             playerScores = [];
             
-            // Start timer
-            if (backend) {
+            // Start countdown timer
+            if (backend && timeLimit_ > 0) {
                 backend.startCountdown(timeLimit_);
+                console.log("[VIEWER R2] Started countdown with", timeLimit_, "seconds");
             }
-        } else {
-            // Round 2 đã bắt đầu -> này là ROUND_START cho round tiếp theo (Round 3)
-            console.log("=== ROUND_START Round 3 received - Navigating to Room3 ===");
-            console.log("Round 3 type:", roundType);
-            if (backend) {
-                backend.stopCountdown();
-            }
-            resultDisplayTimer.running = false;
-            rankingDelayTimer.running = false;
-            
-            // Set flag để ngăn xử lý thêm messages
-            isNavigatingAway = true;
-            
-            // Disconnect signals trước khi navigate để tránh nhận messages cho Round 3
-            if (backend) {
-                try {
-                    backend.roundStart.disconnect(handleRoundStart);
-                    backend.roundResult.disconnect(handleRoundResult);
-                    backend.gameEnd.disconnect(handleGameEnd);
-                    console.log("Round2Room signals disconnected before navigating to Room3");
-                } catch (e) {
-                    console.log("Error disconnecting signals:", e);
-                }
-            }
-            
-            // Chuyển sang Room3
-            stackView.replace("qrc:/qml/Round3Room.qml", { 
-                backend: backend
-            });
-        }
-    }
-    
-    function handleRoundResult(resultData) {
-        // Guard: Nếu đang navigate away, bỏ qua tất cả messages
-        if (isNavigatingAway) {
-            console.log("Round2Room: Ignoring message because navigating away");
-            return;
-        }
-        
-        try {
-            var result = JSON.parse(resultData);
-            
-            // CỬA BẢO VỆ: Nếu tin nhắn không phải của Round 2 (không có actual_price) thì bỏ qua
-            if (result.actual_price === undefined) {
-                console.log("Round2Room: Nhận nhầm dữ liệu của Round khác, bỏ qua.");
-                return;
-            }
-
-            actualPrice = result.actual_price;
-            playerScores = result.players || [];
-            showResult = true;
-            if (backend) {
-                backend.stopCountdown();
-            }
-            console.log("Round2Room - Kết quả hiển thị: giá thực:", actualPrice, "điểm người chơi:", playerScores.length);
-            
-            // Chỉ stringify nếu playerScores hợp lệ
-            if (playerScores && playerScores.length > 0) {
-                try {
-                    console.log("Round2Room - playerScores data:", JSON.stringify(playerScores));
-                } catch (e) {
-                    console.log("Round2Room - Could not stringify playerScores:", e);
-                }
-            }
-            
-            // Start timer to show result for 3 seconds, then push to ranking
-            resultDisplayTimer.running = true;
-        } catch (e) {
-            console.error("Round2Room - Lỗi parse kết quả:", e);
-        }
-    }
-    
-    function submitPriceGuess() {
-        if (priceSubmitted || showResult || guessedPrice <= 0) return;
-        
-        console.log("Submitting price guess:", guessedPrice, "for round:", round2Id);
-        priceSubmitted = true;
-        
-        if (backend) {
-            backend.submitPrice(round2Id, guessedPrice);
-        }
-    }
-    
-    // Use Connections instead of .connect() to prevent accumulation
-    Connections {
-        target: backend
-        enabled: round2Room.StackView.status === StackView.Active && !isNavigatingAway
-        
-        function onRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit_, imageUrl) {
-            handleRoundStart(roundId, roundType, prodName, prodDesc, threshold, timeLimit_, imageUrl);
         }
         
         function onRoundResult(resultData) {
-            handleRoundResult(resultData);
+            console.log("[VIEWER R2] Round 2 result received:", resultData);
+            try {
+                var result = JSON.parse(resultData);
+                if (result.actual_price !== undefined) {
+                    actualPrice = result.actual_price;
+                    playerScores = result.players || [];
+                    showResult = true;
+                    
+                    // Reset flag since we're now seeing result in real-time
+                    justJoinedDuringResult = false;
+                    console.log("[VIEWER R2] Result displayed, starting timer");
+                    
+                    // Start timer to show ranking after 3 seconds (match player)
+                    resultDisplayTimer.start();
+                }
+            } catch (e) {
+                console.error("[VIEWER R2] Failed to parse result:", e);
+            }
         }
         
         function onGameEnd(rankingData) {
-            handleGameEnd(rankingData);
+            console.log("[VIEWER R2] GAME_END received (final ranking after all rounds)");
+            console.log("[VIEWER R2] Ranking data:", rankingData);
+            
+            // This is final ranking after Round 3, not Round 2 ranking
+            // Stop timers and navigate to final ranking
+            resultDisplayTimer.stop();
+            rankingDelayTimer.stop();
+            
+            try {
+                var data = JSON.parse(rankingData);
+                var players = data.players || [];
+                console.log("[VIEWER R2] Final ranking, players count:", players.length);
+                
+                // Sort and add rank
+                var sortedPlayers = players.slice().sort(function(a, b) {
+                    return (b.total_score || 0) - (a.total_score || 0);
+                });
+                for (var i = 0; i < sortedPlayers.length; i++) {
+                    sortedPlayers[i].rank = i + 1;
+                }
+                
+                console.log("[VIEWER R2] Switching to final RankingPage");
+                stackView.replace("qrc:/qml/RankingPage.qml", { 
+                    backend: backend,
+                    rankings: sortedPlayers,
+                    roundNumber: 3,
+                    isFinalRanking: true,
+                    isViewer: true,
+                    roomCode: roomCode
+                });
+            } catch (e) {
+                console.error("[VIEWER R2] Failed to parse GAME_END:", e);
+            }
         }
         
         function onTimerTick(secondsRemaining) {
             timeRemaining = secondsRemaining;
         }
         
-        function onLeaveRoomSuccess() {
-            console.log("Round2Room - Leave room successful, returning to home");
-            if (backend) {
-                backend.stopCountdown();
-            }
-            resultDisplayTimer.stop();
-            rankingDelayTimer.stop();
-            stackView.replace("qrc:/qml/HomeUser.qml", {backend: backend});
-        }
-        
-        function onUpdateRoomState(data) {
-            console.log("Round2Room - onUpdateRoomState:", data);
+        function onViewerStateUpdate(data) {
+            console.log("[VIEWER] State update:", data);
             try {
-                var info = JSON.parse(data);
-                if (info.members) {
-                    var memberNames = info.members.split('|');
-                    console.log("Updated members count:", memberNames.length);
-                    
-                    // Nếu không còn ai, quay về trang chủ
-                    if (memberNames.length === 0) {
-                        console.log("All players left, returning to home");
-                        if (backend) backend.stopCountdown();
-                        resultDisplayTimer.stop();
-                        rankingDelayTimer.stop();
-                        stackView.replace("qrc:/qml/HomeUser.qml", {backend: backend});
-                    }
+                var state = JSON.parse(data);
+                
+                // Update product info if available
+                if (state.product_name) {
+                    productName = state.product_name;
+                }
+                if (state.product_desc) {
+                    productDesc = state.product_desc;
+                }
+                if (state.product_image) {
+                    productImage = state.product_image;
+                }
+                if (state.threshold !== undefined) {
+                    thresholdPct = state.threshold;
+                }
+                if (state.time_remaining !== undefined) {
+                    timeRemaining = state.time_remaining;
+                }
+                if (state.actual_price !== undefined) {
+                    actualPrice = state.actual_price;
+                    showResult = true;
+                }
+                if (state.scores) {
+                    playerScores = state.scores;
                 }
             } catch (e) {
-                console.error("Round2Room - Failed to parse UPDATE_ROOM_STATE:", e);
+                console.error("[VIEWER] Failed to parse viewer state:", e);
             }
+        }
+        
+        function onLeaveRoomSuccess() {
+            console.log("[VIEWER] Left room");
+            stackView.replace("qrc:/qml/HomeUser.qml", {backend: backend});
         }
     }
     
@@ -412,7 +329,7 @@ Page {
                     }
                     
                     Text {
-                        text: "ROUND 2 - PRICE GUESSING"
+                        text: "ROUND 2 - VIEWER MODE"
                         font.pixelSize: 14
                         font.bold: true
                         color: "#FFD93D"
@@ -518,10 +435,6 @@ Page {
                         smooth: true
                         asynchronous: true
                         
-                        onStatusChanged: {
-                            console.log("Image status:", status, "URL:", productImage)
-                        }
-                        
                         Rectangle {
                             anchors.fill: parent
                             color: "transparent"
@@ -608,7 +521,7 @@ Page {
             }
         }
         
-        // Price Input
+        // Price Input Display (Disabled for Viewer)
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 165
@@ -619,16 +532,17 @@ Page {
                 GradientStop { position: 1.0; color: "#8B5CF6" }
             }
             
-            border.color: priceSubmitted ? "#10B981" : "#FCD34D"
+            border.color: "#FCD34D"
             border.width: 4
+            opacity: 0.6
             
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 10
+                spacing: 15
                 
                 Text {
-                    text: "Enter Your Price Guess"
-                    font.pixelSize: 22
+                    text: "👁️ VIEWER MODE 👁️"
+                    font.pixelSize: 28
                     font.bold: true
                     color: "white"
                     Layout.alignment: Qt.AlignHCenter
@@ -636,117 +550,17 @@ Page {
                     styleColor: "#4C1D95"
                 }
                 
-                Rectangle {
-                    Layout.preferredWidth: 420
-                    Layout.preferredHeight: 65
-                    radius: 16
-                    color: "white"
-                    border.color: priceInput.activeFocus ? "#10B981" : "#7C3AED"
-                    border.width: 3
-                    Layout.alignment: Qt.AlignHCenter
-                    
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 5
-                        
-                        TextField {
-                            id: priceInput
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            text: ""
-                            placeholderText: "Enter price (VND)..."
-                            font.pixelSize: 28
-                            font.bold: true
-                            color: "#7C3AED"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            enabled: !priceSubmitted && !showResult
-                            leftPadding: 5
-                            rightPadding: 5
-                            topPadding: 0
-                            bottomPadding: 0
-                            
-                            validator: IntValidator {
-                                bottom: 0
-                                top: 999999999
-                            }
-                            
-                            onTextChanged: {
-                                console.log("TextField text changed:", text);
-                                if (text.length > 0) {
-                                    guessedPrice = parseInt(text);
-                                    console.log("Guessed price:", guessedPrice);
-                                } else {
-                                    guessedPrice = 0;
-                                }
-                            }
-                            
-                            background: Item {}
-                            
-                            // Placeholder text style
-                            placeholderTextColor: "#C4B5FD"
-                        }
-                        
-                        Text {
-                            text: "đ"
-                            font.pixelSize: 24
-                            font.bold: true
-                            color: "#7C3AED"
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                }
-                
-                Button {
-                    Layout.preferredWidth: 250
-                    Layout.preferredHeight: 48
-                    Layout.alignment: Qt.AlignHCenter
-                    enabled: !priceSubmitted && !showResult && guessedPrice > 0
-                    
-                    background: Rectangle {
-                        color: parent.enabled ? (parent.hovered ? "#6D28D9" : "#7C3AED") : "#9CA3AF"
-                        radius: 16
-                        border.color: "#FCD34D"
-                        border.width: 3
-                    }
-                    
-                    contentItem: Text {
-                        text: priceSubmitted ? "✓ SUBMITTED" : "SUBMIT GUESS"
-                        font.pixelSize: 18
-                        font.bold: true
-                        color: "white"
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    
-                    onClicked: submitPriceGuess()
-                    
-                    scale: hovered && enabled ? 1.05 : 1.0
-                    Behavior on scale {
-                        NumberAnimation { duration: 150 }
-                    }
-                }
-                
                 Text {
-                    text: priceSubmitted ? "⏳ Waiting for other players..." : ""
-                    font.pixelSize: 13
-                    font.italic: true
+                    text: "You are watching this round.\nYou cannot submit a price guess."
+                    font.pixelSize: 16
                     color: "#FCD34D"
                     Layout.alignment: Qt.AlignHCenter
-                    visible: priceSubmitted && !showResult
-                    
-                    SequentialAnimation on opacity {
-                        loops: Animation.Infinite
-                        running: priceSubmitted && !showResult
-                        NumberAnimation { from: 1.0; to: 0.3; duration: 800 }
-                        NumberAnimation { from: 0.3; to: 1.0; duration: 800 }
-                    }
+                    horizontalAlignment: Text.AlignHCenter
                 }
             }
         }
         
-        // Result and Leaderboard (Footer giống Room 1)
+        // Result and Leaderboard
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 80
@@ -885,7 +699,7 @@ Page {
                     
                     onClicked: {
                         if (backend) {
-                            backend.leaveRoom();
+                            backend.leaveViewer();
                         }
                     }
                 }
@@ -902,6 +716,11 @@ Page {
         target: backend
         function onSystemNotice(message) {
             systemNoticePopup.show(message)
+        }
+        
+        function onRoomClosed(message) {
+            console.log("[VIEWER R2] Room closed:", message);
+            stackView.replace("qrc:/qml/HomeUser.qml", {backend: backend});
         }
     }
 }

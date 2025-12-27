@@ -101,3 +101,63 @@ void db_close(void) {
         printf("[DB] Connection closed.\n");
     }
 }
+
+int db_get_user_id_by_username(const char *username) {
+    if (!g_db_conn || !username) return -1;
+
+    char query[512];
+    snprintf(query, sizeof(query), "SELECT user_id FROM users WHERE username = '%s'", username);
+
+    if (mysql_query(g_db_conn, query)) {
+        fprintf(stderr, "[DB] db_get_user_id_by_username query failed: %s\n", mysql_error(g_db_conn));
+        return -1;
+    }
+
+    MYSQL_RES *res = mysql_store_result(g_db_conn);
+    if (!res) return -1;
+
+    MYSQL_ROW row = mysql_fetch_row(res);
+    int user_id = row && row[0] ? atoi(row[0]) : -1;
+
+    mysql_free_result(res);
+    return user_id;
+}
+
+int db_add_viewer_to_room(int room_id, int user_id) {
+    if (!g_db_conn) return -1;
+
+    char query[512];
+    snprintf(query, sizeof(query),
+        "INSERT INTO room_members (room_id, user_id, role, joined_at, left_at) "
+        "VALUES (%d, %d, 'SPECTATOR', NOW(), NULL)",
+        room_id, user_id);
+
+    if (mysql_query(g_db_conn, query)) {
+        fprintf(stderr, "[DB] db_add_viewer_to_room failed: %s\n", mysql_error(g_db_conn));
+        return -1;
+    }
+
+    printf("[DB] Added viewer user_id=%d to room_id=%d\n", user_id, room_id);
+    return 0;
+}
+
+int db_remove_viewer_from_room(int room_id, int user_id) {
+    if (!g_db_conn) return -1;
+
+    // Cập nhật left_at cho bản ghi gần nhất của viewer này trong room
+    char query[512];
+    snprintf(query, sizeof(query),
+        "UPDATE room_members "
+        "SET left_at = NOW() "
+        "WHERE room_id = %d AND user_id = %d AND role = 'SPECTATOR' AND left_at IS NULL "
+        "ORDER BY joined_at DESC LIMIT 1",
+        room_id, user_id);
+
+    if (mysql_query(g_db_conn, query)) {
+        fprintf(stderr, "[DB] db_remove_viewer_from_room failed: %s\n", mysql_error(g_db_conn));
+        return -1;
+    }
+
+    printf("[DB] Removed viewer user_id=%d from room_id=%d\n", user_id, room_id);
+    return 0;
+}

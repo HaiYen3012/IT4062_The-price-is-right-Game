@@ -35,7 +35,8 @@ Page {
             for (var i = 0; i < json.length; i++) {
                 roomsList.model.append({
                     room_code: json[i].room_code,
-                    players: json[i].players
+                    players: json[i].players,
+                    status: json[i].status || "LOBBY"
                 });
             }
         } catch (e) {
@@ -88,6 +89,121 @@ Page {
         
         function onRoomFull() {
             notifyErrorPopup.popMessage = "Room is full!"
+            notifyErrorPopup.open()
+        }
+        
+        function onJoinAsViewerSuccess() {
+            console.log("Viewer join success, waiting for VIEWER_SYNC...");
+            // Don't navigate yet, wait for viewerSync signal with game state
+        }
+        
+        function onViewerSync(syncData) {
+            console.log("Received VIEWER_SYNC:", syncData);
+            roomListPopup.close();
+            
+            try {
+                var data = JSON.parse(syncData);
+                var state = data.state || "";
+                var roundType = data.round_type || "UNKNOWN";
+                var currentRound = data.round || 1;
+                
+                console.log("Sync data - State:", state, "Round:", currentRound, "Type:", roundType);
+                
+                // Handle based on state field first
+                if (state === "QUESTION" || (state === "" && roundType === "ROUND1" && data.question)) {
+                    // Round 1: Currently showing question
+                    console.log("Viewer joining during QUESTION");
+                    stackView.push("qrc:/qml/ViewerRound1Room.qml", {
+                        backend: backend,
+                        roomCode: pendingRoomCode,
+                        syncData: syncData
+                    });
+                } else if (state === "RESULT") {
+                    // Round 1: Currently showing result
+                    console.log("Viewer joining during RESULT");
+                    stackView.push("qrc:/qml/ViewerRound1Room.qml", {
+                        backend: backend,
+                        roomCode: pendingRoomCode,
+                        syncData: syncData,
+                        initialState: "RESULT"
+                    });
+                } else if (state === "ROUND2" || state === "ROUND2_RESULT" || (roundType === "V1" || roundType === "V2" || roundType === "V4")) {
+                    // Round 2: Showing product or result
+                    var isResult = (state === "ROUND2_RESULT");
+                    console.log("Viewer joining during ROUND2", isResult ? "(RESULT)" : "(QUESTION)");
+                    
+                    // Use time_remaining if available, otherwise fallback to time_limit
+                    var timeToUse = data.time_remaining !== undefined ? data.time_remaining : (data.time_limit || 30);
+                    console.log("Round 2 time - remaining:", data.time_remaining, "limit:", data.time_limit, "using:", timeToUse);
+                    
+                    stackView.push("qrc:/qml/ViewerRound2Room.qml", {
+                        backend: backend,
+                        roomCode: pendingRoomCode,
+                        round2Id: data.round_id || 0,
+                        productName: data.product_name || "",
+                        productDesc: data.product_desc || "",
+                        productImage: data.product_image || "",
+                        thresholdPct: data.threshold || 0,
+                        timeRemaining: timeToUse,
+                        actualPrice: data.product_price || 0,
+                        playerScores: data.players || [],
+                        showResult: isResult,
+                        initialState: isResult ? "RESULT" : "QUESTION"
+                    });
+                } else if (state === "ROUND3" || roundType === "V3") {
+                    // Round 3 - Use Round3Room with viewer mode
+                    console.log("Viewer joining during ROUND3");
+                    
+                    // Parse players from sync data
+                    var players = data.players || [];
+                    console.log("Round 3 players:", JSON.stringify(players));
+                    
+                    stackView.push("qrc:/qml/Round3Room.qml", {
+                        backend: backend,
+                        isViewerMode: true,
+                        initialPlayers: players  // Pass players to initialize
+                    });
+                } else if (state === "RANKING" || roundType === "RANKING") {
+                    // Currently in ranking page between rounds
+                    console.log("Viewer joining during RANKING");
+                    
+                    // Sort players and add rank (same as Round1Room does)
+                    var players = data.players || [];
+                    var sortedPlayers = players.slice().sort(function(a, b) {
+                        return (b.total_score || b.score || 0) - (a.total_score || a.score || 0);
+                    });
+                    for (var i = 0; i < sortedPlayers.length; i++) {
+                        sortedPlayers[i].rank = i + 1;
+                    }
+                    
+                    stackView.push("qrc:/qml/RankingPage.qml", {
+                        backend: backend,
+                        rankings: sortedPlayers,
+                        roundNumber: currentRound,
+                        isFinalRanking: false,
+                        isViewer: true,
+                        roomCode: pendingRoomCode
+                    });
+                } else {
+                    // Unknown - fallback to Round1
+                    console.warn("Unknown state/round type:", state, roundType);
+                    stackView.push("qrc:/qml/ViewerRound1Room.qml", {
+                        backend: backend,
+                        roomCode: pendingRoomCode
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to parse VIEWER_SYNC:", e);
+                // Fallback to Round1
+                stackView.push("qrc:/qml/ViewerRound1Room.qml", {
+                    backend: backend,
+                    roomCode: pendingRoomCode
+                });
+            }
+        }
+        
+        function onJoinAsViewerFail() {
+            notifyErrorPopup.popMessage = "Cannot view this room!"
             notifyErrorPopup.open()
         }
     }
@@ -359,13 +475,40 @@ Page {
 
                         Column {
                             spacing: 6
-                            Text { text: room_code; color: "white"; font.pixelSize: 22; font.bold: true }
-                            Text { text: players; color: "#E8F5E9"; font.pixelSize: 18 }
+                            Text { 
+                                text: room_code
+                                color: "white"
+                                font.pixelSize: 22
+                                font.bold: true
+                            }
+                            Row {
+                                spacing: 8
+                                Text { 
+                                    text: players
+                                    color: "#E8F5E9"
+                                    font.pixelSize: 18
+                                }
+                                Rectangle {
+                                    visible: status === "PLAYING"
+                                    width: 70
+                                    height: 24
+                                    radius: 12
+                                    color: "#4CAF50"
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "PLAYING"
+                                        color: "white"
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                    }
+                                }
+                            }
                         }
 
                         Item { Layout.fillWidth: true }
 
                         Rectangle {
+                            visible: status === "LOBBY"
                             width: 100; height: 50
                             radius: 25
                             color: "#FFCA28"
@@ -380,6 +523,26 @@ Page {
                                     pendingRoomCode = room_code
                                     if (backend) {
                                         backend.joinRoom(room_code)
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Rectangle {
+                            visible: status === "PLAYING"
+                            width: 100; height: 50
+                            radius: 25
+                            color: "#29B6F6"
+                            border.width: 4
+                            border.color: "#0277BD"
+                            Text { anchors.centerIn: parent; text: "VIEW"; color: "white"; font.pixelSize: 20; font.bold: true }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    pendingRoomCode = room_code
+                                    if (backend) {
+                                        backend.joinAsViewer(room_code)
                                     }
                                 }
                             }
@@ -401,7 +564,8 @@ Page {
                                 for (var i = 0; i < json.length; i++) {
                                     roomsList.model.append({
                                         room_code: json[i].room_code,
-                                        players: json[i].players
+                                        players: json[i].players,
+                                        status: json[i].status || "LOBBY"
                                     })
                                 }
                             }
