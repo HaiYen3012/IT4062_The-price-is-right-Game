@@ -13,6 +13,7 @@ Page {
     property string userName: ""
     property var backend: null
     property string pendingRoomCode: ""
+    property var stackView
 
     function refreshOnlineUsers() {
         if (!backend) return;
@@ -206,15 +207,37 @@ Page {
             notifyErrorPopup.popMessage = "Cannot view this room!"
             notifyErrorPopup.open()
         }
+        
+        function onEditProfileSuccess() {
+            // Cập nhật username hiển thị ngay
+            if (backend && backend.user_name) {
+                homeUser.userName = backend.user_name;
+            }
+            notifySuccessPopup.popMessage = "Cập nhật thành công!";
+            notifySuccessPopup.open();
+            backToHomeTimer.start();
+        }
     }
     
-    Component.onCompleted: {
-        if (userName === "" && backend) userName = backend.user_name
-        
-        // Initial load
-        refreshOnlineUsers();
-        refreshRoomsList();
+// Add this to HomeUser.qml Component.onCompleted
+Component.onCompleted: {
+    if (userName === "" && backend) userName = backend.user_name
+    
+    // Initial load
+    refreshOnlineUsers();
+    refreshRoomsList();
+}
+
+// Add this handler to update username when page becomes active again
+StackView.onActivated: {
+    console.log("HomeUser activated, updating username from backend")
+    if (backend && backend.user_name) {
+        userName = backend.user_name
+        console.log("Updated username to:", userName)
     }
+}
+
+
 
     // Background sunburst
     Rectangle {
@@ -280,7 +303,15 @@ Page {
             Rectangle { width: 110; height: 28; radius: 14; color: "#FFFFFF";
                 Text { anchors.centerIn: parent; text: userName !== "" ? userName : "NKDuyen"; font.bold: true; color: "#333" }
             }
-            Button { text: "SETTING"; width: 120; height: 40 }
+
+            Button {
+                text: "Edit profile"
+                width: 120; height: 40
+                onClicked: {
+                    if (stackView)
+                        stackView.push("qrc:/qml/EditProfilePage.qml", { backend: backend, stackView: stackView, homeUser: homeUser })
+                }
+            }
             Button {
                 text: "LOGOUT"; width: 120; height: 40
                 onClicked: {
@@ -292,6 +323,7 @@ Page {
                     stackView.replace("qrc:/qml/HomeGuest.qml", { backend: backend })
                 }
             }
+         
         }
     }
 
@@ -640,5 +672,17 @@ Page {
             onTriggered: notifyErrorPopup.close()
         }
     }
-    
+
+    Timer {
+        id: backToHomeTimer
+        interval: 1500
+        running: false
+        repeat: false
+        onTriggered: {
+            if (stackView) {
+                // Quay về HomeUser nếu đang ở EditProfilePage
+                while (stackView.depth > 1) stackView.pop();
+            }
+        }
+    }
 }

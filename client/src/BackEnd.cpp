@@ -431,6 +431,22 @@ void BackEnd::submitPrice(int roundId, int guessedPrice)
     }
 }
 
+void BackEnd::editProfile(QString newUsername, QString newPassword) {
+    if (newUsername.isEmpty() || newPassword.isEmpty()) {
+        emit editProfileFail();
+        return;
+    }
+    Message msg;
+    msg.type = EDIT_PROFILE;
+    strcpy(msg.data_type, "profile");
+    msg.length = newUsername.length() + newPassword.length() + 2;
+    QByteArray data = newUsername.toUtf8() + "|" + newPassword.toUtf8();
+    strncpy(msg.value, data.constData(), BUFF_SIZE-1);
+    msg.value[BUFF_SIZE-1] = '\0';
+    send(sockfd, &msg, sizeof(Message), 0);
+    // Đợi phản hồi trong hàm nhận dữ liệu (handleMessage)
+}
+
 // Slot được gọi từ main thread để xử lý message từ background thread
 void BackEnd::handleMessageFromThread(int msgType, QString msgValue)
 {
@@ -611,6 +627,12 @@ void BackEnd::handleMessageFromThread(int msgType, QString msgValue)
     else if (msgType == ROOM_CLOSED) {
         qDebug() << "ROOM_CLOSED received:" << msgValue;
         emit roomClosed(msgValue);
+    }
+    else if (msgType == EDIT_PROFILE_SUCCESS) {
+        emit editProfileSuccess();
+    }
+    else if (msgType == EDIT_PROFILE_FAIL) {
+        emit editProfileFail();
     }
 }
 

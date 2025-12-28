@@ -49,6 +49,7 @@ public:
     Q_INVOKABLE void stopCountdown();
     Q_INVOKABLE void joinAsViewer(QString roomCode);
     Q_INVOKABLE void leaveViewer();
+    Q_INVOKABLE void editProfile(QString newUsername, QString newPassword);
 
 signals:
     void userNameChanged();
@@ -90,6 +91,8 @@ signals:
     void viewerStateUpdate(QString data);
     void viewerSync(QString syncData);
     void roomClosed(QString message);
+    void editProfileSuccess();
+    void editProfileFail();
 
 public slots:
     void handleMessageFromThread(int msgType, QString msgValue);
