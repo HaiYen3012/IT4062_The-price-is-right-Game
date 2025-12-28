@@ -1277,12 +1277,10 @@ compiler_rcc_make_all: qrc_qml.cpp
 compiler_rcc_clean:
 	-$(DEL_FILE) qrc_qml.cpp
 qrc_qml.cpp: resources/qml.qrc \
-		/opt/homebrew/share/qt/libexec/rcc \
-		ui/trophy.png \
-		ui/pic.png \
-		../ui/image.png \
-		qml/ViewerRound2Room.qml \
-		qml/EditProfilePage.qml \
+		/usr/lib/qt5/bin/rcc \
+		qml/WaitingRoom.qml \
+		qml/SignInPage.qml \
+		qml/Round3Room.qml \
 		qml/HomeUser.qml \
 		qml/WaitingRoom.qml \
 		qml/Round3Room.qml \
@@ -1292,12 +1290,19 @@ qrc_qml.cpp: resources/qml.qrc \
 		qml/RegisterPage.qml \
 		qml/RankingPage.qml \
 		qml/SystemNoticePopup.qml \
-		qml/Round2Room.qml \
+		qml/ViewerRound1Room.qml \
 		qml/Round1Room.qml \
+		qml/ViewerRound2Room.qml \
+		qml/RegisterPage.qml \
+		qml/KickConfirmPopup.qml \
+		qml/HomeGuest.qml \
 		qml/main.qml \
-		qml/SignInPage.qml \
-		qml/ViewerRound1Room.qml
-	/opt/homebrew/share/qt/libexec/rcc -name qml resources/qml.qrc -o qrc_qml.cpp
+		qml/Round2Room.qml \
+		qml/ViewerRound3Room.qml \
+		ui/pic.png \
+		ui/trophy.png \
+		../ui/image.png
+	/usr/lib/qt5/bin/rcc -name qml resources/qml.qrc -o qrc_qml.cpp
 
 compiler_moc_predefs_make_all: moc_predefs.h
 compiler_moc_predefs_clean:
