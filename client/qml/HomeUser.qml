@@ -208,7 +208,7 @@ Page {
             notifyErrorPopup.open()
         }
         
-        function onEditProfileSuccess() {
+        function onUpdateProfileSuccess() {
             // Cập nhật username hiển thị ngay
             if (backend && backend.user_name) {
                 homeUser.userName = backend.user_name;
@@ -216,6 +216,11 @@ Page {
             notifySuccessPopup.popMessage = "Cập nhật thành công!";
             notifySuccessPopup.open();
             backToHomeTimer.start();
+        }
+
+        function onUpdateProfileFail() {
+            notifyErrorPopup.popMessage = "Cập nhật thất bại!";
+            notifyErrorPopup.open();
         }
     }
     

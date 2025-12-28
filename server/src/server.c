@@ -136,6 +136,84 @@ int handle_signup(char username[BUFF_SIZE], char password[BUFF_SIZE])
     return result;
 }
 
+int handle_update_profile(Client *cli, char new_username[BUFF_SIZE], char new_password[BUFF_SIZE])
+{
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    char query[512];
+    int result = UPDATE_PROFILE_FAIL;
+
+    printf("Update profile attempt: user='%s', new_username='%s'\n", cli->login_account, new_username);
+
+    pthread_mutex_lock(&mutex);
+
+    // Kiểm tra username mới có bị trùng không (nếu có nhập username mới)
+    if (strlen(new_username) > 0 && strcmp(new_username, cli->login_account) != 0) {
+        sprintf(query, "SELECT user_id FROM users WHERE username = '%s'", new_username);
+
+        if (mysql_query(g_db_conn, query)) {
+            fprintf(stderr, "MySQL query error: %s\n", mysql_error(g_db_conn));
+            pthread_mutex_unlock(&mutex);
+            return UPDATE_PROFILE_FAIL;
+        }
+
+        res = mysql_store_result(g_db_conn);
+        row = mysql_fetch_row(res);
+
+        if (row != NULL) {
+            // Username mới đã tồn tại
+            mysql_free_result(res);
+            printf("New username already exists: %s\n", new_username);
+            pthread_mutex_unlock(&mutex);
+            return UPDATE_PROFILE_FAIL;
+        }
+        mysql_free_result(res);
+    }
+
+    // Build UPDATE query
+    char update_parts[256] = "";
+    int has_update = 0;
+
+    if (strlen(new_username) > 0 && strcmp(new_username, cli->login_account) != 0) {
+        sprintf(update_parts, "username = '%s'", new_username);
+        has_update = 1;
+    }
+
+    if (strlen(new_password) > 0) {
+        if (has_update) {
+            sprintf(update_parts + strlen(update_parts), ", password_hash = '%s'", new_password);
+        } else {
+            sprintf(update_parts, "password_hash = '%s'", new_password);
+        }
+        has_update = 1;
+    }
+
+    if (has_update) {
+        sprintf(query, "UPDATE users SET %s WHERE username = '%s'",
+                update_parts, cli->login_account);
+
+        if (mysql_query(g_db_conn, query)) {
+            fprintf(stderr, "MySQL update error: %s\n", mysql_error(g_db_conn));
+            result = UPDATE_PROFILE_FAIL;
+        } else {
+            // Cập nhật thành công, update client info
+            if (strlen(new_username) > 0 && strcmp(new_username, cli->login_account) != 0) {
+                strcpy(cli->login_account, new_username);
+            }
+            result = UPDATE_PROFILE_SUCCESS;
+            printf("Update profile success for user: %s\n", cli->login_account);
+        }
+    } else {
+        // Không có gì để update
+        result = UPDATE_PROFILE_SUCCESS;
+        printf("No changes to update for user: %s\n", cli->login_account);
+    }
+
+    pthread_mutex_unlock(&mutex);
+
+    return result;
+}
+
 int handle_login(Client *cli, char username[BUFF_SIZE], char password[BUFF_SIZE])
 {
     MYSQL_RES *res;
@@ -331,7 +409,41 @@ void *handle_client(void *arg)
                     send(conn_fd, &msg, sizeof(Message), 0);
                 }
                 break;
-            
+
+            case UPDATE_PROFILE:
+                {
+                    char new_username[BUFF_SIZE], new_password[BUFF_SIZE];
+                    // Parse format: new_username | new_password
+                    char *token = strtok(msg.value, "|");
+                    if (token != NULL) {
+                        // Trim leading/trailing spaces
+                        while (*token == ' ') token++;
+                        strcpy(new_username, token);
+                        // Remove trailing spaces
+                        char *end = new_username + strlen(new_username) - 1;
+                        while (end > new_username && *end == ' ') {
+                            *end = '\0';
+                            end--;
+                        }
+
+                        token = strtok(NULL, "|");
+                        if (token != NULL) {
+                            while (*token == ' ') token++;
+                            strcpy(new_password, token);
+                            end = new_password + strlen(new_password) - 1;
+                            while (end > new_password && *end == ' ') {
+                                *end = '\0';
+                                end--;
+                            }
+                        }
+                    }
+
+                    result = handle_update_profile(cli, new_username, new_password);
+                    msg.type = result;
+                    send(conn_fd, &msg, sizeof(Message), 0);
+                }
+                break;
+
             case ASYNC_CONNECT:
                 {
                     char username[BUFF_SIZE];

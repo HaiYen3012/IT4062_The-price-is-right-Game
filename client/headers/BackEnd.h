@@ -30,6 +30,7 @@ public:
     Q_INVOKABLE void disconnectToServer();
     Q_INVOKABLE void login(QString username, QString password);
     Q_INVOKABLE void signUp(QString username, QString password);
+    Q_INVOKABLE void updateProfile(QString newUsername, QString newPassword);
     Q_INVOKABLE void logOut();
     Q_INVOKABLE QString fetchRooms();
     Q_INVOKABLE QString fetchOnlineUsers();
@@ -57,6 +58,8 @@ signals:
     void connectFail();
     void signupSuccess();
     void accountExist();
+    void updateProfileSuccess();
+    void updateProfileFail();
     void loginSuccess();
     void loggedIn();
     void accountBlocked();

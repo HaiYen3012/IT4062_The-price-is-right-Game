@@ -40,6 +40,9 @@ enum msg_type
   SIGNUP,
   ACCOUNT_EXIST,
   SIGNUP_SUCCESS,
+  UPDATE_PROFILE,
+  UPDATE_PROFILE_SUCCESS,
+  UPDATE_PROFILE_FAIL,
   CHANGE_PASSWORD,
   SAME_OLD_PASSWORD,
   CHANGE_PASSWORD_SUCCESS,
@@ -184,6 +187,7 @@ Client *find_client(int conn_fd);
 
 // Authentication functions
 int handle_signup(char username[BUFF_SIZE], char password[BUFF_SIZE]);
+int handle_update_profile(Client *cli, char new_username[BUFF_SIZE], char new_password[BUFF_SIZE]);
 int handle_login(Client *cli, char username[BUFF_SIZE], char password[BUFF_SIZE]);
 int handle_async_connect(int conn_fd, char username[BUFF_SIZE]);
 

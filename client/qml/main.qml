@@ -72,6 +72,17 @@ ApplicationWindow {
             notifyErrorPopup.open()
         }
 
+        // Update profile signals
+        onUpdateProfileSuccess: {
+            waitPopup.close()
+            rootWindow.currentAction = "updateProfileSuccess"
+        }
+
+        onUpdateProfileFail: {
+            waitPopup.close()
+            rootWindow.currentAction = "updateProfileFail"
+        }
+
         onLoggedIn: {
             waitPopup.close()
             rootWindow.loginStatus = "LOGGED_IN"

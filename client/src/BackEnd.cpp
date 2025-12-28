@@ -167,6 +167,32 @@ void BackEnd::signUp(QString username, QString password)
     }
 }
 
+void BackEnd::updateProfile(QString newUsername, QString newPassword)
+{
+    qDebug() << "Updating profile with new username: " << newUsername;
+
+    char uname[256], pwd[256];
+    strcpy(uname, newUsername.toStdString().c_str());
+    strcpy(pwd, newPassword.toStdString().c_str());
+
+    int result = update_profile(uname, pwd);
+
+    switch(result) {
+        case UPDATE_PROFILE_SUCCESS:
+            qDebug() << "Update profile success!";
+            emit updateProfileSuccess();
+            break;
+        case UPDATE_PROFILE_FAIL:
+            qDebug() << "Update profile failed!";
+            emit updateProfileFail();
+            break;
+        default:
+            qDebug() << "Unknown update profile error!";
+            emit updateProfileFail();
+            break;
+    }
+}
+
 void BackEnd::logOut()
 {
     qDebug() << "Logging out...";

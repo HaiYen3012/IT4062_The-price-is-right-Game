@@ -14,6 +14,22 @@ Page {
         color: rootWindow.backgroundColor
     }
 
+    Connections {
+        target: backend
+        enabled: editProfilePage.StackView.status === StackView.Active
+
+        function onUpdateProfileSuccess() {
+            notifySuccessPopup.popMessage = "Cập nhật thành công!";
+            notifySuccessPopup.open();
+            backToHomeTimer.start();
+        }
+
+        function onUpdateProfileFail() {
+            notifyErrorPopup.popMessage = "Cập nhật thất bại!";
+            notifyErrorPopup.open();
+        }
+    }
+
     // Game Logo (smaller)
     Text {
         id: logoText
@@ -30,9 +46,9 @@ Page {
 
     // Edit Profile Form Container
     Rectangle {
-        id: editForm
+        id: editProfileForm
         width: 500
-        height: 400
+        height: 350
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: logoText.bottom
         anchors.topMargin: 10
@@ -57,41 +73,13 @@ Page {
                 anchors.horizontalCenter: parent.horizontalCenter
             }
 
-            // Current Username Display
-            Column {
-                width: parent.width
-                spacing: 5
-
-                Text {
-                    text: "CURRENT USERNAME"
-                    font.pixelSize: 14
-                    font.bold: true
-                    color: rootWindow.textColor
-                }
-
-                Rectangle {
-                    width: parent.width
-                    height: 40
-                    color: "#E0E0E0"
-                    radius: 10
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: backend ? backend.user_name : ""
-                        font.pixelSize: 14
-                        font.bold: true
-                        color: "#666666"
-                    }
-                }
-            }
-
             // New Username Field
             Column {
                 width: parent.width
                 spacing: 5
 
                 Text {
-                    text: "NEW USERNAME (leave empty to keep current)"
+                    text: "NEW USER NAME"
                     font.pixelSize: 14
                     font.bold: true
                     color: rootWindow.textColor
@@ -108,7 +96,7 @@ Page {
                         anchors.fill: parent
                         anchors.margins: 5
                         font.pixelSize: 14
-                        placeholderText: "Enter new username..."
+                        placeholderText: ""
                         background: Rectangle {
                             color: "transparent"
                         }
@@ -122,7 +110,7 @@ Page {
                 spacing: 5
 
                 Text {
-                    text: "NEW PASSWORD (leave empty to keep current)"
+                    text: "NEW PASSWORD"
                     font.pixelSize: 14
                     font.bold: true
                     color: rootWindow.textColor
@@ -140,7 +128,7 @@ Page {
                         anchors.margins: 5
                         font.pixelSize: 14
                         echoMode: TextInput.Password
-                        placeholderText: "Enter new password..."
+                        placeholderText: ""
                         background: Rectangle {
                             color: "transparent"
                         }
@@ -172,7 +160,7 @@ Page {
                         anchors.margins: 5
                         font.pixelSize: 14
                         echoMode: TextInput.Password
-                        placeholderText: "Re-enter password..."
+                        placeholderText: ""
                         background: Rectangle {
                             color: "transparent"
                         }
@@ -185,7 +173,7 @@ Page {
     // Bottom Buttons
     Row {
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: editForm.bottom
+        anchors.top: editProfileForm.bottom
         anchors.topMargin: 15
         spacing: 40
 
@@ -194,7 +182,7 @@ Page {
             id: cancelButton
             width: 180
             height: 50
-            
+
             contentItem: Text {
                 text: "CANCEL"
                 font.pixelSize: 20
@@ -203,24 +191,24 @@ Page {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
-            
+
             background: Rectangle {
-                color: cancelButton.pressed ? Qt.darker("#888888", 1.2) : 
-                       cancelButton.hovered ? Qt.lighter("#888888", 1.1) : 
+                color: cancelButton.pressed ? Qt.darker("#888888", 1.2) :
+                       cancelButton.hovered ? Qt.lighter("#888888", 1.1) :
                        "#888888"
                 radius: 15
                 border.color: "#666666"
                 border.width: 3
-                
+
                 Behavior on color {
                     ColorAnimation { duration: 100 }
                 }
             }
-            
+
             onClicked: {
-                if (stackView) stackView.pop()
+                stackView.pop()
             }
-            
+
             scale: cancelButton.pressed ? 0.95 : 1.0
             Behavior on scale {
                 NumberAnimation { duration: 100 }
@@ -232,7 +220,7 @@ Page {
             id: updateButton
             width: 180
             height: 50
-            
+
             contentItem: Text {
                 text: "UPDATE"
                 font.pixelSize: 20
@@ -241,59 +229,35 @@ Page {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
-            
+
             background: Rectangle {
-                color: updateButton.pressed ? Qt.darker(rootWindow.buttonColor, 1.2) : 
-                       updateButton.hovered ? Qt.lighter(rootWindow.buttonColor, 1.1) : 
+                color: updateButton.pressed ? Qt.darker(rootWindow.buttonColor, 1.2) :
+                       updateButton.hovered ? Qt.lighter(rootWindow.buttonColor, 1.1) :
                        rootWindow.buttonColor
                 radius: 15
                 border.color: "#004466"
                 border.width: 3
-                
+
                 Behavior on color {
                     ColorAnimation { duration: 100 }
                 }
             }
-            
+
             onClicked: {
-                var newUser = newUsernameField.text.trim()
-                var newPass = newPasswordField.text
-                var confirmPass = confirmPasswordField.text
-                
-                // Validate input - must change at least one thing
-                if (newUser === "" && newPass === "") {
-                    notifyErrorPopup.popMessage = "Please change at least one field!"
+                if (newUsernameField.text === "" && newPasswordField.text === "") {
+                    notifyErrorPopup.popMessage = "Vui lòng nhập ít nhất một trường để cập nhật!"
                     notifyErrorPopup.open()
-                    return
-                }
-                
-                // If password fields are filled, they must match
-                if (newPass !== "" || confirmPass !== "") {
-                    if (newPass !== confirmPass) {
-                        notifyErrorPopup.popMessage = "Passwords do not match!"
-                        notifyErrorPopup.open()
-                        return
-                    }
-                    
-                    if (newPass.length < 6) {
-                        notifyErrorPopup.popMessage = "Password must be at least 6 characters!"
-                        notifyErrorPopup.open()
-                        return
-                    }
-                }
-                
-                // Prepare final values
-                var finalUsername = newUser === "" ? backend.user_name : newUser
-                var finalPassword = newPass === "" ? backend.user_name : newPass
-                
-                if (backend) {
-                    rootWindow.currentAction = "editprofile"
-                    waitPopup.popMessage = "Updating..."
+                } else if (newPasswordField.text !== "" && newPasswordField.text !== confirmPasswordField.text) {
+                    notifyErrorPopup.popMessage = "Mật khẩu không khớp!"
+                    notifyErrorPopup.open()
+                } else {
+                    rootWindow.currentAction = "updateProfile"
+                    waitPopup.popMessage = "Đang cập nhật..."
                     waitPopup.open()
-                    backend.editProfile(finalUsername, finalPassword)
+                    backEnd.updateProfile(newUsernameField.text, newPasswordField.text)
                 }
             }
-            
+
             scale: updateButton.pressed ? 0.95 : 1.0
             Behavior on scale {
                 NumberAnimation { duration: 100 }
@@ -301,160 +265,56 @@ Page {
         }
     }
 
-    // Connections to backend signals
-    Connections {
-        target: backend
-        function onEditProfileSuccess() {
-            if (typeof waitPopup !== 'undefined' && waitPopup.visible) waitPopup.close();
-            if (typeof updating !== 'undefined') updating = false;
-            editProfilePage.message = "Cập nhật thành công!";
-            if (typeof homeUser !== 'undefined') homeUser.userName = backend.user_name;
-            if (typeof homeUser !== 'undefined' && typeof homeUser.notifySuccessPopup !== 'undefined') {
-                homeUser.notifySuccessPopup.popMessage = "Cập nhật thành công!";
-                homeUser.notifySuccessPopup.open();
-            }
-            if (typeof stackView !== 'undefined') {
-                stackView.pop();
-            }
-        }
-        function onEditProfileFail() {
-            if (typeof waitPopup !== 'undefined' && waitPopup.visible) waitPopup.close();
-            if (typeof updating !== 'undefined') updating = false;
-            editProfilePage.message = "Cập nhật thất bại!";
-            if (typeof homeUser !== 'undefined' && typeof homeUser.notifyErrorPopup !== 'undefined') {
-                homeUser.notifyErrorPopup.popMessage = "Cập nhật thất bại!";
-                homeUser.notifyErrorPopup.open();
-            }
-        }
-    }
-
-    // Success Popup
+    // Popup thông báo thành công
     Popup {
         id: notifySuccessPopup
         property string popMessage: ""
-        x: (parent.width - 400) / 2
-        y: (parent.height - 120) / 2
-        width: 400
-        height: 120
+        x: (parent.width - 320) / 2
+        y: 100
+        width: 320; height: 100
         modal: true
-        closePolicy: Popup.NoAutoClose
-        
-        background: Rectangle {
-            color: "#4CAF50"
-            radius: 16
-            border.color: "#388E3C"
-            border.width: 3
-        }
-        
-        Column {
-            anchors.centerIn: parent
-            spacing: 10
-            
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "✓"
-                color: "white"
-                font.pixelSize: 36
-                font.bold: true
-            }
-            
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: notifySuccessPopup.popMessage
-                color: "white"
-                font.pixelSize: 18
-                font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-            }
-        }
-    }
-
-    // Error Popup
-    Popup {
-        id: notifyErrorPopup
-        property string popMessage: ""
-        x: (parent.width - 400) / 2
-        y: (parent.height - 120) / 2
-        width: 400
-        height: 120
-        modal: true
-        
-        background: Rectangle {
-            color: "#FF5252"
-            radius: 16
-            border.color: "#D32F2F"
-            border.width: 3
-        }
-        
-        Column {
-            anchors.centerIn: parent
-            spacing: 10
-            
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "✗"
-                color: "white"
-                font.pixelSize: 36
-                font.bold: true
-            }
-            
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: notifyErrorPopup.popMessage
-                color: "white"
-                font.pixelSize: 18
-                font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                width: parent.width - 40
-            }
-        }
-        
-        Timer {
-            interval: 2500
-            running: notifyErrorPopup.visible
-            onTriggered: notifyErrorPopup.close()
-        }
-    }
-
-    // Wait Popup
-    Popup {
-        id: waitPopup
-        property string popMessage: "Processing..."
-        x: (parent.width - 300) / 2
-        y: (parent.height - 100) / 2
-        width: 300
-        height: 100
-        modal: true
-        closePolicy: Popup.NoAutoClose
-        
-        background: Rectangle {
-            color: rootWindow.buttonColor
-            radius: 16
-            border.color: "#004466"
-            border.width: 3
-        }
-        
+        background: Rectangle { color: "#4CAF50"; radius: 16 }
         Text {
             anchors.centerIn: parent
-            text: waitPopup.popMessage
+            text: notifySuccessPopup.popMessage
             color: "white"
             font.pixelSize: 18
             font.bold: true
         }
     }
 
-    // Timer to go back after success
+    // Popup thông báo lỗi
+    Popup {
+        id: notifyErrorPopup
+        property string popMessage: ""
+        x: (parent.width - 320) / 2
+        y: 100
+        width: 320; height: 100
+        modal: true
+        background: Rectangle { color: "#FF5252"; radius: 16 }
+        Text {
+            anchors.centerIn: parent
+            text: notifyErrorPopup.popMessage
+            color: "white"
+            font.pixelSize: 18
+            font.bold: true
+        }
+        Timer {
+            interval: 2000
+            running: notifyErrorPopup.visible
+            onTriggered: notifyErrorPopup.close()
+        }
+    }
+
     Timer {
-        id: backTimer
+        id: backToHomeTimer
         interval: 1500
         running: false
         repeat: false
         onTriggered: {
-            console.log("Back timer triggered, popping to home")
-            notifySuccessPopup.close()
             if (stackView) {
-                stackView.pop()
+                // Quay về HomeUser
+                stackView.pop();
             }
         }
     }
