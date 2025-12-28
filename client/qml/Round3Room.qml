@@ -11,12 +11,6 @@ Page {
     property string hostName: "Host"
     property int currentPlayerIndex: 0
     property bool spinning: false
-    property real spinnerOffset: 0
-    property int itemHeight: 40
-    property int cycles: 6
-    property int spinTargetIndex: 0
-    property bool spinnerInitialized: false
-    property string displayedNumber: "000"
     property int shuffleTick: 0
     property int shuffleMax: 25
     
@@ -35,7 +29,10 @@ Page {
     property var finalRankings: null  // Store final rankings from GAME_END
     property bool finalRankingPushed: false  // Prevent double navigation
 
-    property var numbers: ["050","005","060","070","025","080","040","095","010","085","075","035","000","045","090","020","065","055","030","100","015"]
+    property var numbers: [5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100]
+    property real wheelRotation: 0
+    property int targetValue: 5
+    property string displayedNumber: "005"
 
     ListModel { id: playersModel }
     
@@ -74,12 +71,12 @@ Page {
         onTriggered: {
             shuffleTick += 1
             if (shuffleTick >= shuffleMax) {
-                displayedNumber = numbers[spinTargetIndex]
+                displayedNumber = String(targetValue).padStart(3, "0")
                 running = false
                 endCurrentTurn()
                 return
             }
-            displayedNumber = numbers[Math.floor(Math.random() * numbers.length)]
+            displayedNumber = String(numbers[Math.floor(Math.random() * numbers.length)]).padStart(3, "0")
         }
     }
 
@@ -240,24 +237,47 @@ Page {
         console.log("handleSpinResult: spin_val =", res.spin_val, "spins_count =", res.spins_count);
         
         var val = res.spin_val
-        var targetIdx = -1
+        targetValue = val
         
-        for (var i = 0; i < numbers.length; i++) {
-            if (parseInt(numbers[i]) === val) { targetIdx = i; break; }
+        // Tính góc quay đến giá trị mục tiêu
+        var targetIdx = numbers.indexOf(val)
+        if (targetIdx === -1) targetIdx = 0
+        
+        // Mỗi ô chiếm 360/20 = 18 độ
+        var anglePerItem = 360.0 / numbers.length
+        
+        // Normalize góc hiện tại về khoảng [0, 360)
+        var currentNormalized = ((wheelRotation % 360) + 360) % 360
+        
+        // Góc đích để segment targetIdx ở vị trí con trỏ (phía trên)
+        var targetNormalized = (360 - (targetIdx * anglePerItem)) % 360
+        
+        // Tính độ lệch từ vị trí hiện tại đến vị trí đích
+        var deltaAngle = targetNormalized - currentNormalized
+        
+        // Đảm bảo quay theo hướng ngắn nhất nhưng luôn quay ít nhất 3 vòng
+        if (deltaAngle > 0) {
+            deltaAngle = deltaAngle - 360
         }
+        
+        // Quay thêm 3-5 vòng đầy đủ
+        var extraRotations = 3 + Math.floor(Math.random() * 3)
+        var totalRotation = -extraRotations * 360 + deltaAngle
 
-        if (targetIdx !== -1) {
-            spinTargetIndex = targetIdx
+        // Cập nhật lượt quay từ server
+        currentTurnSpins = res.spins_count;
+        console.log("handleSpinResult: currentRotation=" + wheelRotation + ", targetIdx=" + targetIdx + ", totalRotation=" + totalRotation);
 
-            // Cập nhật lượt quay từ server
-            currentTurnSpins = res.spins_count;
-            console.log("handleSpinResult: Updated currentTurnSpins to", currentTurnSpins);
-
-            // Hiệu ứng xáo số trong ô đỏ
-            shuffleTick = 0
-            spinning = true
-            shuffleTimer.start()
-        }
+        // Hiệu ứng xáo số trong ô đỏ
+        shuffleTick = 0
+        spinning = true
+        
+        // Animation quay vòng
+        wheelAnimation.from = wheelRotation
+        wheelAnimation.to = wheelRotation + totalRotation
+        wheelAnimation.start()
+        
+        shuffleTimer.start()
     }
 
     function endCurrentTurn() {
@@ -494,39 +514,134 @@ Page {
                 anchors.horizontalCenter: parent.horizontalCenter
             }
 
-            Rectangle {
-                id: spinnerViewport
-                width: 140
-                height: 220
-                color: "transparent"
-                clip: true
-                radius: 6
+            // Vòng xoay tròn
+            Item {
+                id: wheelContainer
+                width: 280
+                height: 280
                 anchors.horizontalCenter: parent.horizontalCenter
                 
+                // Con trỏ cố định ở trên
+                Canvas {
+                    id: pointerCanvas
+                    width: 30
+                    height: 30
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top
+                    anchors.topMargin: -5
+                    z: 100
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.fillStyle = "#FF5252"
+                        ctx.beginPath()
+                        ctx.moveTo(15, 28)
+                        ctx.lineTo(0, 0)
+                        ctx.lineTo(30, 0)
+                        ctx.closePath()
+                        ctx.fill()
+                    }
+                }
+                
+                // Vòng xoay
                 Item {
-                    id: spinnerContent
-                    width: spinnerViewport.width
-                    height: numbers.length * itemHeight * (cycles + 2)
-                    x: 0
-                    y: spinnerOffset
+                    id: wheel
+                    width: parent.width
+                    height: parent.height
+                    anchors.centerIn: parent
+                    rotation: wheelRotation
                     
+                    // Animation quay
+                    NumberAnimation {
+                        id: wheelAnimation
+                        target: wheel
+                        property: "rotation"
+                        duration: 3000
+                        easing.type: Easing.OutCubic
+                        onStopped: {
+                            wheelRotation = wheel.rotation % 360
+                        }
+                    }
+                    
+                    // Vòng tròn nền
+                    Rectangle {
+                        width: parent.width
+                        height: parent.height
+                        radius: width / 2
+                        color: "#ffffff"
+                        border.color: "#0B5E8A"
+                        border.width: 4
+                    }
+                    
+                    // Các ô số trên vòng tròn
                     Repeater {
-                        model: numbers.length * (cycles + 2)
-                        delegate: Rectangle {
-                            width: spinnerViewport.width
-                            height: itemHeight
-                            y: index * itemHeight
-                            color: index % numbers.length === spinTargetIndex ? "#FF5252" : "#E3F2FD"
-                            border.color: "#90CAF9"
-                            border.width: 1
+                        model: numbers.length
+                        delegate: Item {
+                            id: segment
+                            width: wheel.width
+                            height: wheel.height
+                            rotation: index * (360 / numbers.length)
                             
+                            property int segmentValue: numbers[index]
+                            
+                            Canvas {
+                                anchors.centerIn: parent
+                                width: parent.width
+                                height: parent.height
+                                
+                                onPaint: {
+                                    var ctx = getContext("2d")
+                                    var centerX = width / 2
+                                    var centerY = height / 2
+                                    var radius = width / 2 - 4
+                                    var anglePerSegment = 2 * Math.PI / numbers.length
+                                    var startAngle = -Math.PI / 2
+                                    var endAngle = startAngle + anglePerSegment
+                                    
+                                    // Màu xen kẽ đậm hơn
+                                    ctx.fillStyle = index % 2 === 0 ? "#81D4FA" : "#4FC3F7"
+                                    
+                                    ctx.beginPath()
+                                    ctx.moveTo(centerX, centerY)
+                                    ctx.arc(centerX, centerY, radius, startAngle, endAngle)
+                                    ctx.closePath()
+                                    ctx.fill()
+                                    
+                                    // Viền rõ hơn
+                                    ctx.strokeStyle = "#0277BD"
+                                    ctx.lineWidth = 2
+                                    ctx.stroke()
+                                }
+                            }
+                            
+                            // Số trên mỗi ô - đặt gần viền ngoài hơn
                             Text {
                                 anchors.centerIn: parent
-                                text: numbers[index % numbers.length]
+                                anchors.verticalCenterOffset: -parent.height * 0.35
+                                text: segment.segmentValue
                                 font.pixelSize: 18
                                 font.bold: true
-                                color: index % numbers.length === spinTargetIndex ? "white" : "#0B5E8A"
+                                color: "#FFFFFF"
+                                rotation: -segment.rotation - wheel.rotation
+                                style: Text.Outline
+                                styleColor: "#0277BD"
                             }
+                        }
+                    }
+                    
+                    // Tâm vòng xoay
+                    Rectangle {
+                        width: 40
+                        height: 40
+                        radius: 20
+                        color: "#FF9800"
+                        border.color: "#F57C00"
+                        border.width: 3
+                        anchors.centerIn: parent
+                        
+                        Text {
+                            anchors.centerIn: parent
+                            text: "🎯"
+                            font.pixelSize: 20
                         }
                     }
                 }
@@ -565,7 +680,7 @@ Page {
                     id: spinBtn
                     width: 120
                     height: 50
-                    text: spinning ? "SPINNING..." : (currentTurnSpins === 0 ? "SPIN 1" : "SPIN 2")
+                    text: spinning ? "⏳ ..." : (currentTurnSpins === 0 ? "SPIN 1" : "SPIN 2")
                     
                     // Logic tự động: Chỉ cần khai báo ở đây, KHÔNG can thiệp thủ công
                     // Disable buttons in viewer mode
@@ -616,7 +731,7 @@ Page {
 
                 Button {
                     id: passBtn
-                    text: "⏭️ PASS"
+                    text: "PASS"
                     width: 120
                     height: 50
                     
@@ -937,14 +1052,13 @@ Page {
             setupDummyPlayers() 
         }
 
-        if (spinnerViewport) {
-            spinnerOffset = - ((cycles) * numbers.length) * itemHeight + (spinnerViewport.height/2 - itemHeight/2)
-            spinnerInitialized = true
-        }
-
+        // Khởi tạo giá trị hiển thị
         if (numbers.length > 0) {
-            displayedNumber = numbers[0]
+            displayedNumber = String(numbers[0]).padStart(3, "0")
+            targetValue = numbers[0]
         }
+        
+        wheelRotation = 0
     }
 
     Component.onDestruction: {

@@ -380,16 +380,20 @@ compiler_rcc_clean:
 qrc_qml.cpp: resources/qml.qrc \
 		/usr/lib/qt5/bin/rcc \
 		qml/WaitingRoom.qml \
-		qml/Room3.qml \
 		qml/SignInPage.qml \
+		qml/Round3Room.qml \
 		qml/HomeUser.qml \
 		qml/RankingPage.qml \
+		qml/SystemNoticePopup.qml \
+		qml/ViewerRound1Room.qml \
 		qml/Round1Room.qml \
+		qml/ViewerRound2Room.qml \
 		qml/RegisterPage.qml \
 		qml/KickConfirmPopup.qml \
 		qml/HomeGuest.qml \
 		qml/main.qml \
 		qml/Round2Room.qml \
+		qml/ViewerRound3Room.qml \
 		ui/pic.png \
 		ui/trophy.png \
 		../ui/image.png
