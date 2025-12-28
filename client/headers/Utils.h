@@ -97,7 +97,10 @@ enum msg_type
   VIEWER_STATE_UPDATE,
   VIEWER_SYNC,
   LEAVE_VIEWER,
-  ROOM_CLOSED
+  ROOM_CLOSED,
+  EDIT_PROFILE,
+  EDIT_PROFILE_SUCCESS,
+  EDIT_PROFILE_FAIL
 };
 
 typedef struct _message
@@ -145,6 +148,8 @@ int submit_price(int round_id, int guessed_price);
 // Viewer functions
 int join_as_viewer(char room_code[]);
 int leave_viewer();
+// Profile management
+int edit_profile(char new_username[], char new_password[]);
 // Message listener
 void set_message_callback(MessageCallback callback);
 void start_message_listener();

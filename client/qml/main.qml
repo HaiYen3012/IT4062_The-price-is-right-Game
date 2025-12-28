@@ -38,7 +38,7 @@ ApplicationWindow {
         onConnectFail: {
             rootWindow.connectionFailed = true
             waitPopup.close()
-            notifyErrorPopup.popMessage = "Kết nối thất bại!"
+            notifyErrorPopup.popMessage = "Failed to connect!"
             notifyErrorPopup.open()
         }
 
@@ -54,14 +54,14 @@ ApplicationWindow {
         onLoginSuccess: {
             waitPopup.close()
             rootWindow.loginStatus = "LOGIN_SUCCESS"
-            notifySuccessPopup.popMessage = "Chào mừng " + backEnd.user_name
+            notifySuccessPopup.popMessage = "Login successful! Welcome " + backEnd.user_name
             notifySuccessPopup.open()
-            stackView.push("qrc:/qml/HomeUser.qml", { userName: backEnd.user_name, backend: backEnd })
+            stackView.push("qrc:/qml/HomeUser.qml", { userName: backEnd.user_name, backend: backEnd, stackView: stackView })
         }
 
         onAccountNotExist: { 
             waitPopup.close(); 
-            notifyErrorPopup.popMessage = "Tài khoản không tồn tại!"; 
+            notifyErrorPopup.popMessage = "Account does not exist!"; 
             notifyErrorPopup.open() 
         }
 
