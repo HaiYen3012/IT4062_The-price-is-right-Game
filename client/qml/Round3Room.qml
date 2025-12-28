@@ -8,6 +8,7 @@ Page {
     height: 600
 
     property var backend: null
+    property var stackView: StackView.view  // Use attached property as default
     property string hostName: "Host"
     property int currentPlayerIndex: 0
     property bool spinning: false

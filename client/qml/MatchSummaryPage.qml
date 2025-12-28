@@ -8,6 +8,7 @@ Page {
     height: 600
 
     property var backend: null
+    property var stackView: StackView.view  // Use attached property as default
     property var rankings: []
     property var matchData: null
     property bool isViewer: false

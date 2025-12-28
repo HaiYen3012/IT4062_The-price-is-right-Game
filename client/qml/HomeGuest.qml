@@ -6,6 +6,9 @@ Page {
     width: 800
     height: 600
 
+    property var backend: null
+    property var stackView: StackView.view  // Use attached property as default
+
     background: Rectangle {
         anchors.fill: parent
         color: rootWindow.backgroundColor

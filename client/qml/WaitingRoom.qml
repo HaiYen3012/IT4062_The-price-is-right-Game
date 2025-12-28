@@ -15,6 +15,7 @@ Page {
     property bool isReady: false
     property var backend: null
     property var roomMembers: []
+    property var stackView: StackView.view  // Use attached property as default
     
     // Invite button debounce
     property var lastInvitedPlayer: ""
@@ -25,6 +26,7 @@ Page {
     
     // Revision counter to force QML re-render when arrays change
     property int stateRevision: 0
+    property int roomStateVersion: 0  // Track room state version for UI updates
     property bool hasReceivedRoomState: false  // Track if we've received room state from server
     
     // Function to reset all ready states (except host)

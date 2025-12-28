@@ -13,7 +13,7 @@ Page {
     property string userName: ""
     property var backend: null
     property string pendingRoomCode: ""
-    property var stackView
+    property var stackView: StackView.view  // Use attached property as default
 
     function refreshOnlineUsers() {
         if (!backend) return;

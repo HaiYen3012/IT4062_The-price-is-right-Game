@@ -8,6 +8,7 @@ Page {
     height: 600
     
     property var backend: null
+    property var stackView: StackView.view  // Use attached property as default
     property var rankings: []
     property var matchData: null  // Full match data with round details for replay
     property int roundNumber: 1  // Round number (1, 2, 3, ...)
