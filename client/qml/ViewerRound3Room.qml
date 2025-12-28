@@ -8,6 +8,7 @@ Page {
     height: 600
     
     property var backend: null
+    property var stackView: StackView.view  // Use attached property as default
     property string roomCode: ""
     property string syncData: ""  // Initial sync data from server
     property var currentState: null

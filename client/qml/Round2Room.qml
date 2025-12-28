@@ -8,6 +8,7 @@ Page {
     height: 600
     
     property var backend: null
+    property var stackView: StackView.view  // Use attached property as default
     property int round2Id: 0
     property string productName: ""
     property string productDesc: ""

@@ -8,6 +8,7 @@ Page {
     height: 600
 
     property var backend: null
+    property var stackView: StackView.view  // Use attached property as default
     property string hostName: "Host"
     property int currentPlayerIndex: 0
     property bool spinning: false
@@ -27,7 +28,16 @@ Page {
     // Round 3 result display
     property var round3Results: null  // Store ROUND3_END data
     property var finalRankings: null  // Store final rankings from GAME_END
+    property var matchData: null      // Store full match data for MatchSummaryPage (round1, round2, round3 details)
     property bool finalRankingPushed: false  // Prevent double navigation
+    
+    // Pending ROUND3_END handling (wait for animation to complete)
+    property bool pendingRound3End: false
+    property var pendingRound3Results: null
+    
+    // Sync flags for shuffle and wheel animation completion
+    property bool shuffleComplete: false
+    property bool wheelComplete: false
 
     property var numbers: [5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100]
     property real wheelRotation: 0
@@ -62,6 +72,34 @@ Page {
             // Navigation now handled in popup.onClosed to ensure popup fully disappears first
         }
     }
+    
+    // Timer for delay display before showing ROUND3_END popup (let user see final result)
+    // Bắt đầu ngay khi nhận ROUND3_END để đồng bộ giữa các clients
+    Timer {
+        id: absoluteDelayTimer
+        interval: 6000  // Default 6 giây
+        running: false
+        onTriggered: {
+            // Nếu animation vẫn đang chạy, đợi thêm 500ms rồi thử lại
+            if (spinning) {
+                console.log("Popup timer triggered but animation still running, waiting 500ms more...");
+                absoluteDelayTimer.interval = 500;
+                absoluteDelayTimer.start();
+                return;
+            }
+            
+            if (pendingRound3Results) {
+                console.log("Displaying ROUND3_END popup after delay (synced across clients)");
+                round3Results = pendingRound3Results.details || [];
+                round3ResultPopup.open();
+                round3ResultTimer.start();
+                
+                // Reset pending
+                pendingRound3End = false;
+                pendingRound3Results = null;
+            }
+        }
+    }
 
     Timer {
         id: shuffleTimer
@@ -73,7 +111,13 @@ Page {
             if (shuffleTick >= shuffleMax) {
                 displayedNumber = String(targetValue).padStart(3, "0")
                 running = false
-                endCurrentTurn()
+                shuffleComplete = true  // Set flag
+                console.log("Shuffle complete, wheelComplete=", wheelComplete);
+                
+                // Check nếu cả hai complete
+                if (shuffleComplete && wheelComplete) {
+                    endCurrentTurn();
+                }
                 return
             }
             displayedNumber = String(numbers[Math.floor(Math.random() * numbers.length)]).padStart(3, "0")
@@ -153,15 +197,35 @@ Page {
                 else if (res.type === "ROUND3_END") {
                     // Round 3 ended - store results and show popup
                     console.log("Vòng 3 kết thúc - Nhận kết quả:", JSON.stringify(res));
-                    round3Results = res.details || [];  // Array of {user, score, left}
-                    spinning = false;
                     
-                    // Show result popup
-                    round3ResultPopup.open();
+                    // Luôn lưu pending và start timer ngay lập tức
+                    // Timer start cùng lúc ở tất cả clients (vì nhận message broadcast cùng lúc)
+                    pendingRound3End = true;
+                    pendingRound3Results = res;
                     
-                    // Start timer to auto-dismiss; if rankings not yet available we'll push once GAME_END arrives
-                    console.log("Starting result timer after ROUND3_END");
-                    round3ResultTimer.start();
+                    // Tính delay để đồng bộ popup giữa các clients
+                    var delayMs = 6000;  // Default: 6s (3s animation + 3s xem kết quả)
+                    
+                    // Nếu BE gửi 'timestamp' (server time in ms), tính remaining delay chính xác hơn
+                    if (res.timestamp && typeof res.timestamp === 'number') {
+                        var currentTime = Date.now();
+                        var serverTimestamp = res.timestamp;
+                        var elapsed = currentTime - serverTimestamp;
+                        var remaining = 6000 - elapsed;
+                        
+                        // Clamp: không âm và không quá 6s
+                        if (remaining < 0) remaining = 0;
+                        if (remaining > 6000) remaining = 6000;
+                        
+                        delayMs = remaining;
+                        console.log("Using server timestamp sync: elapsed=", elapsed, "ms, remaining=", remaining, "ms");
+                    } else {
+                        console.log("No server timestamp, using fixed 6s delay");
+                    }
+                    
+                    console.log("Starting absolute delay timer (" + delayMs + "ms) for synced popup across all clients");
+                    absoluteDelayTimer.interval = delayMs;
+                    absoluteDelayTimer.start();
                 }
             } catch (e) {
                 console.error("Lỗi xử lý JSON:", e)
@@ -178,23 +242,37 @@ Page {
                 console.log("Final rankings from server:", JSON.stringify(players));
                 
                 // Server đã gửi rank và total_score sẵn, không cần sort lại
-                // Chỉ cần sử dụng trực tiếp
                 var finalRankings = players;
-                spinning = false;
                 
                 // Store final rankings for timer callback
                 room3.finalRankings = finalRankings;
                 
-                // If popup is showing (or timer is running), let timer close then navigate; otherwise navigate immediately
-                if (!finalRankingPushed) {
-                    if (round3ResultPopup.visible || round3ResultTimer.running) {
-                        console.log("GAME_END received while popup active -> ensure timer is running; navigation will occur on popup close");
+                // Store full match data including round1, round2, round3 details for MatchSummaryPage
+                room3.matchData = data;
+                console.log("Stored matchData with round details:", 
+                    "round1:", data.round1 ? "yes" : "no",
+                    "round2:", data.round2 ? "yes" : "no", 
+                    "round3:", data.round3 ? "yes" : "no");
+                
+                // Store final rankings for timer callback
+                room3.finalRankings = finalRankings;
+                
+                // Nếu đang hiện Popup kết quả vòng 3 HOẶC đang quay bánh xe HOẶC timer đang chạy
+                // -> Không chuyển trang ngay, để cho các process đó hoàn tất
+                if (round3ResultPopup.visible || round3ResultTimer.running || spinning) {
+                    console.log("GAME_END received while popup/spinning/timer active -> will navigate after completion");
+                    // Đảm bảo timer đang chạy để sau khi popup đóng sẽ chuyển trang
+                    if (!round3ResultTimer.running) {
                         round3ResultTimer.start();
-                    } else {
-                        console.log("GAME_END received after popup closed -> replacing to RankingPage now");
+                    }
+                } else {
+                    // Chỉ chuyển trang ngay nếu mọi thứ đã xong xuôi
+                    if (!finalRankingPushed) {
+                        console.log("GAME_END received after all processes done -> replacing to RankingPage now");
                         stackView.replace("qrc:/qml/RankingPage.qml", {
                             backend: backend,
                             rankings: finalRankings,
+                            matchData: room3.matchData,
                             roundNumber: 3,
                             isFinalRanking: true,
                             isViewer: isViewerMode
@@ -268,6 +346,10 @@ Page {
         currentTurnSpins = res.spins_count;
         console.log("handleSpinResult: currentRotation=" + wheelRotation + ", targetIdx=" + targetIdx + ", totalRotation=" + totalRotation);
 
+        // Reset completion flags trước khi start animation
+        shuffleComplete = false;
+        wheelComplete = false;
+        
         // Hiệu ứng xáo số trong ô đỏ
         shuffleTick = 0
         spinning = true
@@ -297,6 +379,9 @@ Page {
             currentServerResult = null
         }
         applyNextTurn()
+        
+        // Không cần start timer ở đây nữa - absoluteDelayTimer đã start ngay khi nhận ROUND3_END
+        // để đồng bộ popup giữa tất cả clients
     }
 
     // --- GIAO DIỆN ---
@@ -559,6 +644,13 @@ Page {
                         easing.type: Easing.OutCubic
                         onStopped: {
                             wheelRotation = wheel.rotation % 360
+                            wheelComplete = true  // Set flag
+                            console.log("Wheel animation complete, shuffleComplete=", shuffleComplete);
+                            
+                            // Check nếu cả hai complete
+                            if (shuffleComplete && wheelComplete) {
+                                endCurrentTurn();
+                            }
                         }
                     }
                     
@@ -680,7 +772,7 @@ Page {
                     id: spinBtn
                     width: 120
                     height: 50
-                    text: spinning ? "⏳ ..." : (currentTurnSpins === 0 ? "SPIN 1" : "SPIN 2")
+                    text: spinning ? "..." : (currentTurnSpins === 0 ? "SPIN 1" : "SPIN 2")
                     
                     // Logic tự động: Chỉ cần khai báo ở đây, KHÔNG can thiệp thủ công
                     // Disable buttons in viewer mode
@@ -880,6 +972,7 @@ Page {
                 stackView.replace("qrc:/qml/RankingPage.qml", {
                     backend: backend,
                     rankings: rankingsCopy,
+                    matchData: room3.matchData,
                     roundNumber: 3,
                     isFinalRanking: true,
                     isViewer: isViewerMode
@@ -1065,6 +1158,7 @@ Page {
         console.log("Room3 being destroyed - stopping all timers");
         round3ResultTimer.stop();
         shuffleTimer.stop();
+        absoluteDelayTimer.stop();
         spinning = false;
     }
 

@@ -2425,7 +2425,13 @@ void broadcast_final_ranking(int room_id, int match_id)
         match->current_round_id = 0;  // No active round during ranking
     }
     
-    // Get total scores for ALL players in this match (including those who left)
+    // Buffer lớn để chứa toàn bộ match history
+    char result_json[32768] = "{";  // Increased from 8192 to 32KB to prevent buffer overflow
+    char temp_buf[4096];
+    int json_len = 1;  // Track current JSON length (starts at 1 for '{')
+    const int max_json_len = sizeof(result_json) - 2;  // Reserve space for '}' and null terminator
+    
+    // ========== PHẦN 1: Lấy thông tin tổng điểm người chơi ==========
     char query[2048];
     sprintf(query, 
         "SELECT u.username, SUM(COALESCE(ra.score_awarded, 0)) AS total_score, rm.left_at "
@@ -2438,40 +2444,170 @@ void broadcast_final_ranking(int room_id, int match_id)
         "GROUP BY u.username, rm.left_at "
         "ORDER BY total_score DESC", match_id);
     
-    printf("[FINAL_RANKING] SQL Query: %s\n", query);
-    
-    char result_json[BUFF_SIZE] = "{\"players\":[";
+    json_len += snprintf(result_json + json_len, max_json_len - json_len, "\"players\":[");
     
     if (mysql_query(g_db_conn, query) == 0) {
-        printf("[FINAL_RANKING] Query executed successfully\n");
         MYSQL_RES *res = mysql_store_result(g_db_conn);
-        MYSQL_ROW row;
-        int first = 1;
-        int rank = 1;
-        int player_count = 0;
-        
-        while ((row = mysql_fetch_row(res)) != NULL) {
-            player_count++;
-            int has_left = (row[2] != NULL) ? 1 : 0;
-            printf("[FINAL_RANKING] Player %d: %s, Total Score: %s, Left: %d\n", rank, row[0], row[1], has_left);
-            if (!first) strcat(result_json, ",");
-            first = 0;
+        if (res) {
+            MYSQL_ROW row;
+            int first = 1;
+            int rank = 1;
             
-            char player_json[300];
-            sprintf(player_json, "{\"rank\":%d,\"username\":\"%s\",\"total_score\":%s,\"left\":%s}", 
-                    rank++, row[0], row[1], has_left ? "true" : "false");
-            strcat(result_json, player_json);
+            while ((row = mysql_fetch_row(res)) != NULL) {
+                int has_left = (row[2] != NULL) ? 1 : 0;
+                if (!first) {
+                    json_len += snprintf(result_json + json_len, max_json_len - json_len, ",");
+                }
+                first = 0;
+                
+                int written = snprintf(temp_buf, sizeof(temp_buf), 
+                        "{\"rank\":%d,\"username\":\"%s\",\"total_score\":%s,\"left\":%s}", 
+                        rank++, row[0], row[1] ? row[1] : "0", has_left ? "true" : "false");
+                
+                if (json_len + written < max_json_len) {
+                    json_len += snprintf(result_json + json_len, max_json_len - json_len, "%s", temp_buf);
+                } else {
+                    printf("[FINAL_RANKING] Warning: JSON buffer nearly full, truncating\n");
+                    break;
+                }
+            }
+            mysql_free_result(res);
         }
-        
-        printf("[FINAL_RANKING] Total players found: %d\n", player_count);
-        mysql_free_result(res);
     } else {
-        printf("[FINAL_RANKING] Query failed: %s\n", mysql_error(g_db_conn));
+        printf("[FINAL_RANKING] MySQL error (players): %s\n", mysql_error(g_db_conn));
     }
+    json_len += snprintf(result_json + json_len, max_json_len - json_len, "],");
     
-    strcat(result_json, "]}");
+    // ========== PHẦN 2: Chi tiết Vòng 1 (Multiple Choice) ==========
+    sprintf(query,
+        "SELECT u.username, ra.answer_choice, ra.is_correct, ra.score_awarded "
+        "FROM rounds r "
+        "JOIN round_answers ra ON ra.round_id = r.round_id "
+        "JOIN users u ON ra.user_id = u.user_id "
+        "WHERE r.match_id = %d AND r.round_type = 'ROUND1' "
+        "ORDER BY ra.score_awarded DESC", match_id);
     
-    printf("[FINAL_RANKING] Final JSON: %s\n", result_json);
+    json_len += snprintf(result_json + json_len, max_json_len - json_len, 
+                         "\"round1\":{\"type\":\"BIDDING\",\"answers\":[");
+    
+    if (mysql_query(g_db_conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(g_db_conn);
+        if (res) {
+            MYSQL_ROW row;
+            int first = 1;
+            
+            while ((row = mysql_fetch_row(res)) != NULL) {
+                if (!first) {
+                    json_len += snprintf(result_json + json_len, max_json_len - json_len, ",");
+                }
+                first = 0;
+                
+                int written = snprintf(temp_buf, sizeof(temp_buf), 
+                        "{\"username\":\"%s\",\"answer_choice\":\"%s\",\"is_correct\":%s,\"score_awarded\":%s}", 
+                        row[0], row[1] ? row[1] : "", row[2] ? row[2] : "0", row[3] ? row[3] : "0");
+                
+                if (json_len + written < max_json_len) {
+                    json_len += snprintf(result_json + json_len, max_json_len - json_len, "%s", temp_buf);
+                } else {
+                    printf("[FINAL_RANKING] Warning: JSON buffer nearly full at round1, truncating\n");
+                    break;
+                }
+            }
+            mysql_free_result(res);
+        }
+    } else {
+        printf("[FINAL_RANKING] MySQL error (round1): %s\n", mysql_error(g_db_conn));
+    }
+    json_len += snprintf(result_json + json_len, max_json_len - json_len, "]},");
+    
+    // ========== PHẦN 3: Chi tiết Vòng 2 (Price Guessing) ==========
+    sprintf(query,
+        "SELECT u.username, ra.answer_price, ra.is_correct, ra.score_awarded "
+        "FROM rounds r "
+        "JOIN round_answers ra ON ra.round_id = r.round_id "
+        "JOIN users u ON ra.user_id = u.user_id "
+        "WHERE r.match_id = %d AND r.round_type = 'V2' "
+        "ORDER BY ra.score_awarded DESC", match_id);
+    
+    json_len += snprintf(result_json + json_len, max_json_len - json_len, 
+                         "\"round2\":{\"type\":\"PRICE_GUESS\",\"answers\":[");
+    
+    if (mysql_query(g_db_conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(g_db_conn);
+        if (res) {
+            MYSQL_ROW row;
+            int first = 1;
+            
+            while ((row = mysql_fetch_row(res)) != NULL) {
+                if (!first) {
+                    json_len += snprintf(result_json + json_len, max_json_len - json_len, ",");
+                }
+                first = 0;
+                
+                // answer_price có thể chứa dấu phẩy nên bao quanh bằng chuỗi để JSON hợp lệ
+                int written = snprintf(temp_buf, sizeof(temp_buf), 
+                        "{\"username\":\"%s\",\"answer_price\":\"%s\",\"is_correct\":%s,\"score_awarded\":%s}", 
+                        row[0], row[1] ? row[1] : "", row[2] ? row[2] : "0", row[3] ? row[3] : "0");
+                
+                if (json_len + written < max_json_len) {
+                    json_len += snprintf(result_json + json_len, max_json_len - json_len, "%s", temp_buf);
+                } else {
+                    printf("[FINAL_RANKING] Warning: JSON buffer nearly full at round2, truncating\n");
+                    break;
+                }
+            }
+            mysql_free_result(res);
+        }
+    } else {
+        printf("[FINAL_RANKING] MySQL error (round2): %s\n", mysql_error(g_db_conn));
+    }
+    json_len += snprintf(result_json + json_len, max_json_len - json_len, "]},");
+    
+    // ========== PHẦN 4: Chi tiết Vòng 3 (Spin Wheel) - Từng lần quay ==========
+    sprintf(query,
+        "SELECT u.username, ra.answer_choice, ra.score_awarded "
+        "FROM rounds r "
+        "JOIN round_answers ra ON ra.round_id = r.round_id "
+        "JOIN users u ON ra.user_id = u.user_id "
+        "WHERE r.match_id = %d AND r.round_type = 'V3' "
+        "ORDER BY ra.score_awarded DESC", match_id);
+    
+    json_len += snprintf(result_json + json_len, max_json_len - json_len, 
+                         "\"round3\":{\"type\":\"SPIN_WHEEL\",\"answers\":[");
+    
+    if (mysql_query(g_db_conn, query) == 0) {
+        MYSQL_RES *res = mysql_store_result(g_db_conn);
+        if (res) {
+            MYSQL_ROW row;
+            int first = 1;
+            
+            while ((row = mysql_fetch_row(res)) != NULL) {
+                if (!first) {
+                    json_len += snprintf(result_json + json_len, max_json_len - json_len, ",");
+                }
+                first = 0;
+                
+                int written = snprintf(temp_buf, sizeof(temp_buf), 
+                        "{\"username\":\"%s\",\"answer_choice\":\"%s\",\"score_awarded\":%s}", 
+                        row[0], row[1] ? row[1] : "", row[2] ? row[2] : "0");
+                
+                if (json_len + written < max_json_len) {
+                    json_len += snprintf(result_json + json_len, max_json_len - json_len, "%s", temp_buf);
+                } else {
+                    printf("[FINAL_RANKING] Warning: JSON buffer nearly full at round3, truncating\n");
+                    break;
+                }
+            }
+            mysql_free_result(res);
+        }
+    } else {
+        printf("[FINAL_RANKING] MySQL error (round3): %s\n", mysql_error(g_db_conn));
+    }
+    json_len += snprintf(result_json + json_len, max_json_len - json_len, "]}");
+    
+    json_len += snprintf(result_json + json_len, max_json_len - json_len, "}");
+    
+    printf("[FINAL_RANKING] Final JSON with match history (%d bytes): %s\n", json_len, result_json);
     
     // Mark match as ended
     //sprintf(query, "UPDATE matches SET ended_at = NOW() WHERE match_id = %d", match_id);
@@ -3013,7 +3149,6 @@ void create_match_in_memory(int room_id) {
             new_m->r3_spins[count] = 0;
             new_m->r3_passed[count] = 0;
             
-            // Kiểm tra xem người này đã rời chưa (left_at không NULL)
             new_m->has_left[count] = (row[2] != NULL) ? 1 : 0;
             
             printf("[MATCH] Player %d: %s (user_id=%d, has_left=%d)\n", 

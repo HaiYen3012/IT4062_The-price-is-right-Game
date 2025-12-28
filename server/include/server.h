@@ -18,7 +18,7 @@
 
 #define SERVER_PORT 5555
 #define BACKLOG 10
-#define BUFF_SIZE 1024
+#define BUFF_SIZE 32768
 #define TRUE 1
 #define FALSE 0
 #define MAX_PLAYERS 4

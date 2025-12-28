@@ -15,6 +15,7 @@ Page {
     property bool isReady: false
     property var backend: null
     property var roomMembers: []
+    property var stackView: StackView.view  // Use attached property as default
     
     // Invite button debounce
     property var lastInvitedPlayer: ""
@@ -25,6 +26,7 @@ Page {
     
     // Revision counter to force QML re-render when arrays change
     property int stateRevision: 0
+    property int roomStateVersion: 0  // Track room state version for UI updates
     property bool hasReceivedRoomState: false  // Track if we've received room state from server
     
     // Function to reset all ready states (except host)
@@ -174,7 +176,9 @@ Page {
         
         if (backend) {
             backend.leaveRoomSuccess.connect(function() {
-                stackView.replace("qrc:/qml/HomeUser.qml", { userName: backend.user_name, backend: backend })
+                if (waitingRoom.stackView) {
+                    waitingRoom.stackView.replace("qrc:/qml/HomeUser.qml", { userName: backend.user_name, backend: backend })
+                }
             })
             
             backend.inviteSuccess.connect(function() {
@@ -199,15 +203,17 @@ Page {
             backend.questionStart.connect(function(roundId, question, optA, optB, optC, optD) {
                 console.log("=== QUESTION_START RECEIVED - Navigating to Round1Room ===")
                 console.log("Round ID:", roundId)
-                stackView.replace("qrc:/qml/Round1Room.qml", { 
-                    backend: backend,
-                    roundId: roundId,
-                    questionText: question,
-                    optionA: optA,
-                    optionB: optB,
-                    optionC: optC,
-                    optionD: optD
-                })
+                if (waitingRoom.stackView) {
+                    waitingRoom.stackView.replace("qrc:/qml/Round1Room.qml", { 
+                        backend: backend,
+                        roundId: roundId,
+                        questionText: question,
+                        optionA: optA,
+                        optionB: optB,
+                        optionC: optC,
+                        optionD: optD
+                    })
+                }
             })
             
             backend.startGameFail.connect(function() {
@@ -224,7 +230,9 @@ Page {
             backend.kickedFromRoom.connect(function(hostName) {
                 console.log("Kicked from room by:", hostName)
                 // Show notification and return to home
-                stackView.replace("qrc:/qml/HomeUser.qml", { userName: backend.user_name, backend: backend })
+                if (waitingRoom.stackView) {
+                    waitingRoom.stackView.replace("qrc:/qml/HomeUser.qml", { userName: backend.user_name, backend: backend })
+                }
             })
             
             backend.kickSuccess.connect(function() {
@@ -719,9 +727,13 @@ Page {
                             if (backend) {
                                 backend.leaveRoom()
                                 // Quay về màn hình chính thay vì pop
-                                stackView.replace("qrc:/qml/HomeUser.qml", { userName: backend.user_name, backend: backend })
+                                if (waitingRoom.stackView) {
+                                    waitingRoom.stackView.replace("qrc:/qml/HomeUser.qml", { userName: backend.user_name, backend: backend })
+                                }
                             } else {
-                                stackView.replace("qrc:/qml/HomeUser.qml", { userName: backend.user_name, backend: backend })
+                                if (waitingRoom.stackView) {
+                                    waitingRoom.stackView.replace("qrc:/qml/HomeUser.qml", { userName: backend.user_name, backend: backend })
+                                }
                             }
                         }
                     }

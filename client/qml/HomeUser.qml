@@ -13,7 +13,7 @@ Page {
     property string userName: ""
     property var backend: null
     property string pendingRoomCode: ""
-    property var stackView
+    property var stackView: StackView.view  // Use attached property as default
 
     function refreshOnlineUsers() {
         if (!backend) return;
@@ -319,8 +319,10 @@ StackView.onActivated: {
                     if (backend) {
                         backend.logOut()
                     }
-                    // Quay về HomeGuest với backend để có thể login lại
-                    stackView.replace("qrc:/qml/HomeGuest.qml", { backend: backend })
+                    // Quay về trang đăng nhập để tránh unauthorized requests
+                    if (homeUser.stackView) {
+                        homeUser.stackView.replace("qrc:/qml/SignInPage.qml")
+                    }
                 }
             }
          

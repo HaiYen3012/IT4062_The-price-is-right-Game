@@ -6,6 +6,7 @@ Page {
     width: 800
     height: 600
 
+    property var stackView: StackView.view  // Use attached property as default
     property bool showPassword: false
 
     background: Rectangle {
