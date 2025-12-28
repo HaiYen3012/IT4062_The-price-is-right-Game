@@ -2563,15 +2563,14 @@ void broadcast_final_ranking(int room_id, int match_id)
     }
     json_len += snprintf(result_json + json_len, max_json_len - json_len, "]},");
     
-    // ========== PHẦN 4: Chi tiết Vòng 3 (Spin Wheel) - Tổng điểm các lần quay ==========
+    // ========== PHẦN 4: Chi tiết Vòng 3 (Spin Wheel) - Từng lần quay ==========
     sprintf(query,
-        "SELECT u.username, SUM(ra.score_awarded) AS total_score "
+        "SELECT u.username, ra.answer_choice, ra.score_awarded "
         "FROM rounds r "
         "JOIN round_answers ra ON ra.round_id = r.round_id "
         "JOIN users u ON ra.user_id = u.user_id "
         "WHERE r.match_id = %d AND r.round_type = 'V3' "
-        "GROUP BY u.username "
-        "ORDER BY total_score DESC", match_id);
+        "ORDER BY ra.score_awarded DESC", match_id);
     
     json_len += snprintf(result_json + json_len, max_json_len - json_len, 
                          "\"round3\":{\"type\":\"SPIN_WHEEL\",\"answers\":[");
@@ -2589,8 +2588,8 @@ void broadcast_final_ranking(int room_id, int match_id)
                 first = 0;
                 
                 int written = snprintf(temp_buf, sizeof(temp_buf), 
-                        "{\"username\":\"%s\",\"total_score\":%s}", 
-                        row[0], row[1] ? row[1] : "0");
+                        "{\"username\":\"%s\",\"answer_choice\":\"%s\",\"score_awarded\":%s}", 
+                        row[0], row[1] ? row[1] : "", row[2] ? row[2] : "0");
                 
                 if (json_len + written < max_json_len) {
                     json_len += snprintf(result_json + json_len, max_json_len - json_len, "%s", temp_buf);

@@ -80,9 +80,15 @@ Page {
                 answerText = (price === 0 || price) ? price : "-";
                 resultText = a.is_correct ? "Dung" : "Sai";
             } else if (currentRound === 3) {
-                // Round 3: answer_choice (spin value)
-                answerText = a.answer_choice ? ("Quay: " + a.answer_choice) : "-";
-                resultText = "-";
+                // Round 3: answer_choice (spin value) + score_awarded
+                var spinValue = a.answer_choice || "";
+                // Bỏ số 0 ở đầu nếu có (ví dụ: 0,70 → ,70)
+                if (spinValue.startsWith("0,") || spinValue.startsWith("0.")) {
+                    spinValue = spinValue.substring(1);
+                }
+                answerText = spinValue ? ("Quay: " + spinValue) : "-";
+                // Hiển thị điểm riêng của lần quay này
+                resultText = a.score_awarded ? ("+" + a.score_awarded) : "0";
             }
 
             answersModel.append({
