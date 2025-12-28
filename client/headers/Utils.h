@@ -148,6 +148,8 @@ int submit_price(int round_id, int guessed_price);
 // Viewer functions
 int join_as_viewer(char room_code[]);
 int leave_viewer();
+// Profile management
+int edit_profile(char new_username[], char new_password[]);
 // Message listener
 void set_message_callback(MessageCallback callback);
 void start_message_listener();

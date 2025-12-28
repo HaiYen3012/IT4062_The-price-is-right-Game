@@ -446,21 +446,24 @@ void BackEnd::editProfile(QString newUsername, QString newPassword) {
         return;
     }
     
-    qDebug() << "Preparing message...";
-    Message msg;
-    msg.type = EDIT_PROFILE;
-    strcpy(msg.data_type, "profile");
-    msg.length = newUsername.length() + newPassword.length() + 2;
-    QByteArray data = newUsername.toUtf8() + "|" + newPassword.toUtf8();
-    strncpy(msg.value, data.constData(), BUFF_SIZE-1);
-    msg.value[BUFF_SIZE-1] = '\0';
+    qDebug() << "Calling C function edit_profile...";
+    char user[256], pass[256];
+    strcpy(user, newUsername.toStdString().c_str());
+    strcpy(pass, newPassword.toStdString().c_str());
     
-    qDebug() << "Sending message:" << msg.value;
-    qDebug() << "Socket fd:" << sockfd;
+    int result = edit_profile(user, pass);
     
-    int result = send(sockfd, &msg, sizeof(Message), 0);
-    qDebug() << "Send result:" << result;
-    // Đợi phản hồi trong hàm nhận dữ liệu (handleMessage)
+    qDebug() << "Edit profile result:" << result;
+    
+    if (result == EDIT_PROFILE_SUCCESS) {
+        qDebug() << "Edit profile success, updating username";
+        user_name = newUsername;
+        emit userNameChanged();
+        emit editProfileSuccess();
+    } else {
+        qDebug() << "Edit profile failed";
+        emit editProfileFail();
+    }
 }
 
 // Slot được gọi từ main thread để xử lý message từ background thread
