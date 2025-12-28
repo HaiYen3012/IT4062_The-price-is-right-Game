@@ -382,6 +382,7 @@ qrc_qml.cpp: resources/qml.qrc \
 		qml/WaitingRoom.qml \
 		qml/SignInPage.qml \
 		qml/Round3Room.qml \
+		qml/MatchSummaryPage.qml \
 		qml/HomeUser.qml \
 		qml/RankingPage.qml \
 		qml/SystemNoticePopup.qml \

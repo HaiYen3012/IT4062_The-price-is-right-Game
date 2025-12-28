@@ -9,6 +9,7 @@ Page {
     
     property var backend: null
     property var rankings: []
+    property var matchData: null  // Full match data with round details for replay
     property int roundNumber: 1  // Round number (1, 2, 3, ...)
     property bool isFinalRanking: false  // True only for Round 3 total ranking
     property bool isViewer: false  // True if viewer mode
@@ -19,14 +20,14 @@ Page {
 
     Timer {
         id: finalReturnTimer
-        interval: 9000  // Let players view final ranking a bit longer, then auto-return
+        interval: 5000  // 5 giây để xem ranking rồi chuyển sang MatchSummaryPage
         running: isFinalRanking
         repeat: false
         onTriggered: {
             if (isViewer) {
                 leaveRoomAndReturnHome();  // Viewer về trang chủ
             } else {
-                navigateBackToWaitingRoom();  // Player về phòng chờ
+                navigateToMatchSummary();  // Player đi tới trang tổng kết ván đấu
             }
         }
     }
@@ -143,6 +144,24 @@ Page {
         stackView.replace("qrc:/qml/WaitingRoom.qml", { 
             backend: backend,
             hasReceivedRoomState: false  // Force waiting room to reset ready states
+        });
+    }
+    
+    function navigateToMatchSummary() {
+        if (navigatedBack) return;
+        if (!backend) {
+            console.warn("Cannot navigate to match summary, backend is null");
+            return;
+        }
+        navigatedBack = true;
+        console.log("Navigating to MatchSummaryPage with rankings:", JSON.stringify(rankings));
+        console.log("Match data for replay:", JSON.stringify(matchData));
+        stackView.replace("qrc:/qml/MatchSummaryPage.qml", {
+            backend: backend,
+            rankings: rankings,
+            matchData: matchData,  // Pass full match data for replay
+            isViewer: isViewer,
+            roomCode: roomCode
         });
     }
 
@@ -420,16 +439,37 @@ Page {
                     spacing: 8
 
                     Text {
-                        text: "Hiển thị bảng xếp hạng cuối..."
+                        text: "🏆 Bảng xếp hạng cuối cùng"
                         font.pixelSize: 18
                         font.bold: true
                         color: "white"
                     }
 
                     Text {
-                        text: "Tự động quay về phòng chờ sau 5 giây"
+                        text: "Xem chi tiết ván đấu sau 5 giây..."
                         color: "#E5E7EB"
                         font.pixelSize: 14
+                    }
+
+                    // Fallback button nếu auto-transition không chạy
+                    Button {
+                        text: "Xem replay ngay"
+                        Layout.preferredHeight: 36
+                        Layout.preferredWidth: 150
+                        onClicked: navigateToMatchSummary()
+
+                        background: Rectangle {
+                            color: parent.pressed ? "#2563eb" : "#3b82f6"
+                            radius: 8
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            font.pixelSize: 14
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
                     }
                 }
             }
