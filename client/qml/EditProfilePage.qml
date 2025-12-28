@@ -57,13 +57,41 @@ Page {
                 anchors.horizontalCenter: parent.horizontalCenter
             }
 
+            // Current Username Display
+            Column {
+                width: parent.width
+                spacing: 5
+
+                Text {
+                    text: "CURRENT USERNAME"
+                    font.pixelSize: 12
+                    font.bold: true
+                    color: rootWindow.textColor
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 35
+                    color: "#E0E0E0"
+                    radius: 10
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: backend ? backend.user_name : ""
+                        font.pixelSize: 14
+                        font.bold: true
+                        color: "#666666"
+                    }
+                }
+            }
+
             // New Username Field
             Column {
                 width: parent.width
                 spacing: 5
 
                 Text {
-                    text: "NEW USERNAME"
+                    text: "NEW USERNAME (để trống nếu giữ nguyên)"
                     font.pixelSize: 14
                     font.bold: true
                     color: rootWindow.textColor
@@ -94,7 +122,7 @@ Page {
                 spacing: 5
 
                 Text {
-                    text: "NEW PASSWORD"
+                    text: "NEW PASSWORD (để trống nếu giữ nguyên)"
                     font.pixelSize: 14
                     font.bold: true
                     color: rootWindow.textColor
@@ -238,26 +266,33 @@ Page {
                 console.log("Confirm password length:", confirmPass.length)
                 console.log("Backend exists:", backend !== null)
                 
-                // Validate input - all fields required
-                if (newUser === "" || newPass === "" || confirmPass === "") {
-                    notifyErrorPopup.popMessage = "Vui lòng nhập đầy đủ thông tin!"
+                // Must change at least one field
+                if (newUser === "" && newPass === "") {
+                    notifyErrorPopup.popMessage = "Vui lòng thay đổi ít nhất một trường!"
                     notifyErrorPopup.open()
                     return
                 }
                 
-                // Check if passwords match
-                if (newPass !== confirmPass) {
-                    notifyErrorPopup.popMessage = "Mật khẩu không khớp!"
-                    notifyErrorPopup.open()
-                    return
+                // If changing password, both password fields must match
+                if (newPass !== "" || confirmPass !== "") {
+                    if (newPass !== confirmPass) {
+                        notifyErrorPopup.popMessage = "Mật khẩu không khớp!"
+                        notifyErrorPopup.open()
+                        return
+                    }
                 }
                 
                 if (backend) {
-                    console.log("Calling backend.editProfile with:", newUser, newPass)
+                    // Use current username if not changing
+                    var finalUsername = newUser === "" ? backend.user_name : newUser
+                    // Use current username as placeholder if not changing password
+                    var finalPassword = newPass === "" ? backend.user_name : newPass
+                    
+                    console.log("Calling backend.editProfile with:", finalUsername, finalPassword)
                     rootWindow.currentAction = "editprofile"
                     waitPopup.popMessage = "Đang cập nhật..."
                     waitPopup.open()
-                    backend.editProfile(newUser, newPass)
+                    backend.editProfile(finalUsername, finalPassword)
                 } else {
                     console.log("Backend is null!")
                     notifyErrorPopup.popMessage = "Lỗi: Backend không khả dụng!"
