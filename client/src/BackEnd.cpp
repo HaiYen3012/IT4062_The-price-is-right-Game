@@ -14,6 +14,9 @@ static void message_callback_wrapper(Message* msg)
         return;
     }
     
+    // Debug log để track tất cả messages
+    qDebug() << ">>> Message received - Type:" << msg->type << "Value:" << QString::fromUtf8(msg->value);
+    
     // Tạo bản copy an toàn của msg->value để tránh race condition
     // QUAN TRỌNG: Callback này được gọi từ pthread (background thread)
     // Không thể emit signal trực tiếp từ đây vì Qt không thread-safe
