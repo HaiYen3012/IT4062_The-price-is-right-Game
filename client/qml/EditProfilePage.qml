@@ -57,41 +57,13 @@ Page {
                 anchors.horizontalCenter: parent.horizontalCenter
             }
 
-            // Current Username Display
-            Column {
-                width: parent.width
-                spacing: 5
-
-                Text {
-                    text: "CURRENT USERNAME"
-                    font.pixelSize: 14
-                    font.bold: true
-                    color: rootWindow.textColor
-                }
-
-                Rectangle {
-                    width: parent.width
-                    height: 40
-                    color: "#E0E0E0"
-                    radius: 10
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: backend ? backend.user_name : ""
-                        font.pixelSize: 14
-                        font.bold: true
-                        color: "#666666"
-                    }
-                }
-            }
-
             // New Username Field
             Column {
                 width: parent.width
                 spacing: 5
 
                 Text {
-                    text: "NEW USERNAME (leave empty to keep current)"
+                    text: "NEW USERNAME"
                     font.pixelSize: 14
                     font.bold: true
                     color: rootWindow.textColor
@@ -108,7 +80,7 @@ Page {
                         anchors.fill: parent
                         anchors.margins: 5
                         font.pixelSize: 14
-                        placeholderText: "Enter new username..."
+                        placeholderText: ""
                         background: Rectangle {
                             color: "transparent"
                         }
@@ -122,7 +94,7 @@ Page {
                 spacing: 5
 
                 Text {
-                    text: "NEW PASSWORD (leave empty to keep current)"
+                    text: "NEW PASSWORD"
                     font.pixelSize: 14
                     font.bold: true
                     color: rootWindow.textColor
@@ -140,7 +112,7 @@ Page {
                         anchors.margins: 5
                         font.pixelSize: 14
                         echoMode: TextInput.Password
-                        placeholderText: "Enter new password..."
+                        placeholderText: ""
                         background: Rectangle {
                             color: "transparent"
                         }
@@ -154,7 +126,7 @@ Page {
                 spacing: 5
 
                 Text {
-                    text: "CONFIRM PASSWORD"
+                    text: "CONFIRM"
                     font.pixelSize: 14
                     font.bold: true
                     color: rootWindow.textColor
@@ -172,7 +144,7 @@ Page {
                         anchors.margins: 5
                         font.pixelSize: 14
                         echoMode: TextInput.Password
-                        placeholderText: "Re-enter password..."
+                        placeholderText: ""
                         background: Rectangle {
                             color: "transparent"
                         }
@@ -234,7 +206,7 @@ Page {
             height: 50
             
             contentItem: Text {
-                text: "UPDATE"
+                text: "CONFIRM"
                 font.pixelSize: 20
                 font.bold: true
                 color: rootWindow.textColor
@@ -260,37 +232,36 @@ Page {
                 var newPass = newPasswordField.text
                 var confirmPass = confirmPasswordField.text
                 
-                // Validate input - must change at least one thing
-                if (newUser === "" && newPass === "") {
-                    notifyErrorPopup.popMessage = "Please change at least one field!"
+                console.log("Edit Profile clicked")
+                console.log("New username:", newUser)
+                console.log("New password length:", newPass.length)
+                console.log("Confirm password length:", confirmPass.length)
+                console.log("Backend exists:", backend !== null)
+                
+                // Validate input - all fields required
+                if (newUser === "" || newPass === "" || confirmPass === "") {
+                    notifyErrorPopup.popMessage = "Vui lòng nhập đầy đủ thông tin!"
                     notifyErrorPopup.open()
                     return
                 }
                 
-                // If password fields are filled, they must match
-                if (newPass !== "" || confirmPass !== "") {
-                    if (newPass !== confirmPass) {
-                        notifyErrorPopup.popMessage = "Passwords do not match!"
-                        notifyErrorPopup.open()
-                        return
-                    }
-                    
-                    if (newPass.length < 6) {
-                        notifyErrorPopup.popMessage = "Password must be at least 6 characters!"
-                        notifyErrorPopup.open()
-                        return
-                    }
+                // Check if passwords match
+                if (newPass !== confirmPass) {
+                    notifyErrorPopup.popMessage = "Mật khẩu không khớp!"
+                    notifyErrorPopup.open()
+                    return
                 }
                 
-                // Prepare final values
-                var finalUsername = newUser === "" ? backend.user_name : newUser
-                var finalPassword = newPass === "" ? backend.user_name : newPass
-                
                 if (backend) {
+                    console.log("Calling backend.editProfile with:", newUser, newPass)
                     rootWindow.currentAction = "editprofile"
-                    waitPopup.popMessage = "Updating..."
+                    waitPopup.popMessage = "Đang cập nhật..."
                     waitPopup.open()
-                    backend.editProfile(finalUsername, finalPassword)
+                    backend.editProfile(newUser, newPass)
+                } else {
+                    console.log("Backend is null!")
+                    notifyErrorPopup.popMessage = "Lỗi: Backend không khả dụng!"
+                    notifyErrorPopup.open()
                 }
             }
             
@@ -305,26 +276,15 @@ Page {
     Connections {
         target: backend
         function onEditProfileSuccess() {
-            if (typeof waitPopup !== 'undefined' && waitPopup.visible) waitPopup.close();
-            if (typeof updating !== 'undefined') updating = false;
-            editProfilePage.message = "Cập nhật thành công!";
-            if (typeof homeUser !== 'undefined') homeUser.userName = backend.user_name;
-            if (typeof homeUser !== 'undefined' && typeof homeUser.notifySuccessPopup !== 'undefined') {
-                homeUser.notifySuccessPopup.popMessage = "Cập nhật thành công!";
-                homeUser.notifySuccessPopup.open();
-            }
-            if (typeof stackView !== 'undefined') {
-                stackView.pop();
-            }
+            waitPopup.close()
+            notifySuccessPopup.popMessage = "Cập nhật thành công!"
+            notifySuccessPopup.open()
+            backTimer.start()
         }
         function onEditProfileFail() {
-            if (typeof waitPopup !== 'undefined' && waitPopup.visible) waitPopup.close();
-            if (typeof updating !== 'undefined') updating = false;
-            editProfilePage.message = "Cập nhật thất bại!";
-            if (typeof homeUser !== 'undefined' && typeof homeUser.notifyErrorPopup !== 'undefined') {
-                homeUser.notifyErrorPopup.popMessage = "Cập nhật thất bại!";
-                homeUser.notifyErrorPopup.open();
-            }
+            waitPopup.close()
+            notifyErrorPopup.popMessage = "Cập nhật thất bại!"
+            notifyErrorPopup.open()
         }
     }
 

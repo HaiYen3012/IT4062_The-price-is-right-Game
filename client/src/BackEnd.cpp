@@ -432,10 +432,18 @@ void BackEnd::submitPrice(int roundId, int guessedPrice)
 }
 
 void BackEnd::editProfile(QString newUsername, QString newPassword) {
+    qDebug() << "=== editProfile called ===";
+    qDebug() << "New username:" << newUsername;
+    qDebug() << "New password:" << newPassword;
+    qDebug() << "Is empty?" << newUsername.isEmpty() << newPassword.isEmpty();
+    
     if (newUsername.isEmpty() || newPassword.isEmpty()) {
+        qDebug() << "Empty fields detected, emitting fail";
         emit editProfileFail();
         return;
     }
+    
+    qDebug() << "Preparing message...";
     Message msg;
     msg.type = EDIT_PROFILE;
     strcpy(msg.data_type, "profile");
@@ -443,7 +451,12 @@ void BackEnd::editProfile(QString newUsername, QString newPassword) {
     QByteArray data = newUsername.toUtf8() + "|" + newPassword.toUtf8();
     strncpy(msg.value, data.constData(), BUFF_SIZE-1);
     msg.value[BUFF_SIZE-1] = '\0';
-    send(sockfd, &msg, sizeof(Message), 0);
+    
+    qDebug() << "Sending message:" << msg.value;
+    qDebug() << "Socket fd:" << sockfd;
+    
+    int result = send(sockfd, &msg, sizeof(Message), 0);
+    qDebug() << "Send result:" << result;
     // Đợi phản hồi trong hàm nhận dữ liệu (handleMessage)
 }
 
@@ -629,9 +642,11 @@ void BackEnd::handleMessageFromThread(int msgType, QString msgValue)
         emit roomClosed(msgValue);
     }
     else if (msgType == EDIT_PROFILE_SUCCESS) {
+        qDebug() << "=== EDIT_PROFILE_SUCCESS received ===";
         emit editProfileSuccess();
     }
     else if (msgType == EDIT_PROFILE_FAIL) {
+        qDebug() << "=== EDIT_PROFILE_FAIL received ===";
         emit editProfileFail();
     }
 }
