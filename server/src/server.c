@@ -646,6 +646,134 @@ void *handle_client(void *arg)
                     pthread_mutex_unlock(&mutex);
                 }
                 break;
+
+            case EDIT_PROFILE:
+    {
+        printf("[%d] Edit profile request from %s\n", conn_fd, cli->login_account);
+        
+        char new_username[BUFF_SIZE], new_password[BUFF_SIZE];
+        
+        // Parse format: new_username|new_password
+        char *token = strtok(msg.value, "|");
+        if (token != NULL) {
+            while (*token == ' ') token++;
+            strcpy(new_username, token);
+            char *end = new_username + strlen(new_username) - 1;
+            while (end > new_username && *end == ' ') {
+                *end = '\0';
+                end--;
+            }
+            
+            token = strtok(NULL, "|");
+            if (token != NULL) {
+                while (*token == ' ') token++;
+                strcpy(new_password, token);
+                end = new_password + strlen(new_password) - 1;
+                while (end > new_password && *end == ' ') {
+                    *end = '\0';
+                    end--;
+                }
+            }
+        }
+        
+        printf("[%d] New username: '%s', New password: '%s'\n", conn_fd, new_username, new_password);
+        
+        pthread_mutex_lock(&mutex);
+        
+        // Get current user_id
+        char query[512];
+        sprintf(query, "SELECT user_id FROM users WHERE username = '%s'", cli->login_account);
+        
+        if (mysql_query(g_db_conn, query) != 0) {
+            pthread_mutex_unlock(&mutex);
+            msg.type = EDIT_PROFILE_FAIL;
+            send(conn_fd, &msg, sizeof(Message), 0);
+            break;
+        }
+        
+        MYSQL_RES *res = mysql_store_result(g_db_conn);
+        MYSQL_ROW row = mysql_fetch_row(res);
+        
+        if (row == NULL) {
+            mysql_free_result(res);
+            pthread_mutex_unlock(&mutex);
+            msg.type = EDIT_PROFILE_FAIL;
+            send(conn_fd, &msg, sizeof(Message), 0);
+            break;
+        }
+        
+        int user_id = atoi(row[0]);
+        mysql_free_result(res);
+        
+        // Check if username is being changed
+        int username_changed = (strcmp(new_username, cli->login_account) != 0);
+        
+        if (username_changed) {
+            sprintf(query, "SELECT user_id FROM users WHERE username = '%s' AND user_id != %d", 
+                    new_username, user_id);
+            
+            if (mysql_query(g_db_conn, query) == 0) {
+                res = mysql_store_result(g_db_conn);
+                row = mysql_fetch_row(res);
+                
+                if (row != NULL) {
+                    // Username already taken
+                    mysql_free_result(res);
+                    pthread_mutex_unlock(&mutex);
+                    msg.type = EDIT_PROFILE_FAIL;
+                    send(conn_fd, &msg, sizeof(Message), 0);
+                    printf("[%d] Username '%s' already exists\n", conn_fd, new_username);
+                    break;
+                }
+                mysql_free_result(res);
+            }
+        }
+        
+        // Check if password is being changed (placeholder = current username)
+        int password_changed = (strcmp(new_password, cli->login_account) != 0);
+        
+        // Build update query
+        if (username_changed && password_changed) {
+            sprintf(query, "UPDATE users SET username = '%s', password_hash = '%s' WHERE user_id = %d",
+                    new_username, new_password, user_id);
+        } else if (username_changed) {
+            sprintf(query, "UPDATE users SET username = '%s' WHERE user_id = %d",
+                    new_username, user_id);
+        } else if (password_changed) {
+            sprintf(query, "UPDATE users SET password_hash = '%s' WHERE user_id = %d",
+                    new_password, user_id);
+        } else {
+            pthread_mutex_unlock(&mutex);
+            msg.type = EDIT_PROFILE_FAIL;
+            send(conn_fd, &msg, sizeof(Message), 0);
+            printf("[%d] No changes to update\n", conn_fd);
+            break;
+        }
+        
+        printf("[%d] Executing: %s\n", conn_fd, query);
+        
+        if (mysql_query(g_db_conn, query) != 0) {
+            fprintf(stderr, "[%d] MySQL error: %s\n", conn_fd, mysql_error(g_db_conn));
+            pthread_mutex_unlock(&mutex);
+            msg.type = EDIT_PROFILE_FAIL;
+            send(conn_fd, &msg, sizeof(Message), 0);
+            break;
+        }
+        
+        // Update client's login_account if username changed
+        if (username_changed) {
+            strcpy(cli->login_account, new_username);
+            printf("[%d] Username updated to '%s'\n", conn_fd, new_username);
+        }
+        
+        pthread_mutex_unlock(&mutex);
+        
+        msg.type = EDIT_PROFILE_SUCCESS;
+        send(conn_fd, &msg, sizeof(Message), 0);
+        printf("[%d] Edit profile success\n", conn_fd);
+    }
+    break;
+    
             case ROUND_ANSWER:
                 handle_round_3_move(cli, msg.value);
                 break;

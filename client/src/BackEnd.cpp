@@ -14,6 +14,9 @@ static void message_callback_wrapper(Message* msg)
         return;
     }
     
+    // Debug log để track tất cả messages
+    qDebug() << ">>> Message received - Type:" << msg->type << "Value:" << QString::fromUtf8(msg->value);
+    
     // Tạo bản copy an toàn của msg->value để tránh race condition
     // QUAN TRỌNG: Callback này được gọi từ pthread (background thread)
     // Không thể emit signal trực tiếp từ đây vì Qt không thread-safe
@@ -431,6 +434,38 @@ void BackEnd::submitPrice(int roundId, int guessedPrice)
     }
 }
 
+void BackEnd::editProfile(QString newUsername, QString newPassword) {
+    qDebug() << "=== editProfile called ===";
+    qDebug() << "New username:" << newUsername;
+    qDebug() << "New password:" << newPassword;
+    qDebug() << "Is empty?" << newUsername.isEmpty() << newPassword.isEmpty();
+    
+    if (newUsername.isEmpty() || newPassword.isEmpty()) {
+        qDebug() << "Empty fields detected, emitting fail";
+        emit editProfileFail();
+        return;
+    }
+    
+    qDebug() << "Calling C function edit_profile...";
+    char user[256], pass[256];
+    strcpy(user, newUsername.toStdString().c_str());
+    strcpy(pass, newPassword.toStdString().c_str());
+    
+    int result = edit_profile(user, pass);
+    
+    qDebug() << "Edit profile result:" << result;
+    
+    if (result == EDIT_PROFILE_SUCCESS) {
+        qDebug() << "Edit profile success, updating username";
+        user_name = newUsername;
+        emit userNameChanged();
+        emit editProfileSuccess();
+    } else {
+        qDebug() << "Edit profile failed";
+        emit editProfileFail();
+    }
+}
+
 // Slot được gọi từ main thread để xử lý message từ background thread
 void BackEnd::handleMessageFromThread(int msgType, QString msgValue)
 {
@@ -611,6 +646,14 @@ void BackEnd::handleMessageFromThread(int msgType, QString msgValue)
     else if (msgType == ROOM_CLOSED) {
         qDebug() << "ROOM_CLOSED received:" << msgValue;
         emit roomClosed(msgValue);
+    }
+    else if (msgType == EDIT_PROFILE_SUCCESS) {
+        qDebug() << "=== EDIT_PROFILE_SUCCESS received ===";
+        emit editProfileSuccess();
+    }
+    else if (msgType == EDIT_PROFILE_FAIL) {
+        qDebug() << "=== EDIT_PROFILE_FAIL received ===";
+        emit editProfileFail();
     }
 }
 

@@ -16,7 +16,7 @@
         <file alias="qml/ViewerRound1Room.qml">../qml/ViewerRound1Room.qml</file>
         <file alias="qml/ViewerRound2Room.qml">../qml/ViewerRound2Room.qml</file>
         <file alias="qml/ViewerRound3Room.qml">../qml/ViewerRound3Room.qml</file>
-
+        <file alias="qml/EditProfilePage.qml">../qml/EditProfilePage.qml</file>
         <!-- Sửa 2 dòng này -->
         <file alias="ui/pic.png">../ui/pic.png</file>
         <file alias="ui/trophy.png">../ui/trophy.png</file>

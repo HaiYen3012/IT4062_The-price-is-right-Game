@@ -161,3 +161,16 @@ int db_remove_viewer_from_room(int room_id, int user_id) {
     printf("[DB] Removed viewer user_id=%d from room_id=%d\n", user_id, room_id);
     return 0;
 }
+
+int db_update_user_profile(int user_id, const char *new_username, const char *new_password) {
+    if (!g_db_conn || !new_username || !new_password) return -1;
+    char query[512];
+    snprintf(query, sizeof(query),
+        "UPDATE users SET username = '%s', password_hash = '%s' WHERE user_id = %d",
+        new_username, new_password, user_id);
+    if (mysql_query(g_db_conn, query)) {
+        fprintf(stderr, "[DB] db_update_user_profile failed: %s\n", mysql_error(g_db_conn));
+        return -1;
+    }
+    return 0;
+}

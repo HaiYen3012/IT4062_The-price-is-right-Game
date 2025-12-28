@@ -551,3 +551,32 @@ void stop_message_listener()
     printf("Message listener stopped\n");
   }
 }
+
+int edit_profile(char new_username[], char new_password[])
+{
+  Message msg;
+  msg.type = EDIT_PROFILE;
+  strcpy(msg.data_type, "profile");
+  // Format: new_username|new_password
+  strcpy(msg.value, new_username);
+  strcat(msg.value, "|");
+  strcat(msg.value, new_password);
+  msg.length = strlen(msg.value);
+  
+  printf("Sending EDIT_PROFILE: %s\n", msg.value);
+  
+  if (send(sockfd, &msg, sizeof(Message), 0) < 0)
+  {
+    printf("Send edit profile failed\n");
+    return EDIT_PROFILE_FAIL;
+  }
+
+  if (recv(sockfd, &msg, sizeof(Message), 0) < 0)
+  {
+    printf("Receive edit profile response failed\n");
+    return EDIT_PROFILE_FAIL;
+  }
+  
+  printf("Edit profile response type: %d\n", msg.type);
+  return msg.type;
+}
