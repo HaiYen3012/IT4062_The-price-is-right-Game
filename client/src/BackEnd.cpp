@@ -175,14 +175,14 @@ void BackEnd::updateProfile(QString newUsername, QString newPassword)
     strcpy(uname, newUsername.toStdString().c_str());
     strcpy(pwd, newPassword.toStdString().c_str());
 
-    int result = update_profile(uname, pwd);
+    int result = edit_profile(uname, pwd);
 
     switch(result) {
-        case UPDATE_PROFILE_SUCCESS:
+        case EDIT_PROFILE_SUCCESS:
             qDebug() << "Update profile success!";
             emit updateProfileSuccess();
             break;
-        case UPDATE_PROFILE_FAIL:
+        case EDIT_PROFILE_FAIL:
             qDebug() << "Update profile failed!";
             emit updateProfileFail();
             break;

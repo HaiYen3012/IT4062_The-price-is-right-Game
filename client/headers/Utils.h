@@ -126,6 +126,7 @@ int disconnect_to_server();
 int register_async_socket(char username[]);
 int login(char username[], char password[]);
 int signup(char username[], char password[]);
+int edit_profile(char username[], char password[]);
 int logout();
 // Fetch JSON string of rooms into buffer (returns message type or -1 on error)
 int get_rooms(char buffer[], int bufsize);
