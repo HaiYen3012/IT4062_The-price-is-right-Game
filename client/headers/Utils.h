@@ -12,7 +12,7 @@
 #include <time.h>
 
 #define MAX_LINE 1024
-#define BUFF_SIZE 1024
+#define BUFF_SIZE 32768
 
 enum msg_type
 {
