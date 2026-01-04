@@ -1110,8 +1110,8 @@ int handle_join_room(Client *cli, char room_code[BUFF_SIZE])
     int user_id = atoi(row[0]);
     mysql_free_result(res);
     
-    // Kiểm tra xem user đã có record trong room_members chưa
-    sprintf(query, "SELECT left_at FROM room_members WHERE room_id = %d AND user_id = %d", 
+    // Kiểm tra xem user đã có record PLAYER trong room_members chưa (bỏ qua SPECTATOR)
+    sprintf(query, "SELECT left_at FROM room_members WHERE room_id = %d AND user_id = %d AND role = 'PLAYER'", 
             room_id, user_id);
     if (mysql_query(g_db_conn, query)) {
         pthread_mutex_unlock(&mutex);
@@ -1121,17 +1121,18 @@ int handle_join_room(Client *cli, char room_code[BUFF_SIZE])
     row = mysql_fetch_row(res);
     
     if (row != NULL) {
-        // User đã có record, UPDATE để rejoin
+        // User đã có record PLAYER, UPDATE để rejoin
         mysql_free_result(res);
-        sprintf(query, "UPDATE room_members SET left_at = NULL, joined_at = NOW() WHERE room_id = %d AND user_id = %d", 
+        sprintf(query, "UPDATE room_members SET left_at = NULL, joined_at = NOW() WHERE room_id = %d AND user_id = %d AND role = 'PLAYER'", 
                 room_id, user_id);
         if (mysql_query(g_db_conn, query)) {
             fprintf(stderr, "MySQL update error: %s\n", mysql_error(g_db_conn));
             pthread_mutex_unlock(&mutex);
             return JOIN_ROOM_FAIL;
         }
+        printf("[%d] User %s rejoined as PLAYER (updated existing record)\n", cli->conn_fd, cli->login_account);
     } else {
-        // User chưa có record, INSERT mới
+        // User chưa có record PLAYER, INSERT mới
         mysql_free_result(res);
         sprintf(query, "INSERT INTO room_members (room_id, user_id, role) VALUES (%d, %d, 'PLAYER')", 
                 room_id, user_id);
@@ -1140,6 +1141,7 @@ int handle_join_room(Client *cli, char room_code[BUFF_SIZE])
             pthread_mutex_unlock(&mutex);
             return JOIN_ROOM_FAIL;
         }
+        printf("[%d] User %s joined as new PLAYER (inserted new record)\n", cli->conn_fd, cli->login_account);
     }
     
     cli->room_id = room_id;
