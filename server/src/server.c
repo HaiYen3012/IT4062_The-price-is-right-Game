@@ -2362,7 +2362,7 @@ void broadcast_question_result(int room_id, int round_id)
         "JOIN rounds r ON r.round_id = %d "
         "JOIN matches m ON r.match_id = m.match_id AND m.room_id = rm.room_id "
         "LEFT JOIN round_answers ra_current ON ra_current.round_id = r.round_id AND ra_current.user_id = u.user_id "
-        "WHERE rm.role = 'PLAYER' "
+        "WHERE rm.role = 'PLAYER' AND (rm.left_at IS NULL OR rm.left_at >= m.started_at) "
         "ORDER BY total_score DESC", round_id);
     
     char result_json[BUFF_SIZE] = "{\"correct\":\"";
@@ -2443,6 +2443,7 @@ void broadcast_final_ranking(int room_id, int match_id)
         "LEFT JOIN rounds r ON r.match_id = m.match_id "
         "LEFT JOIN round_answers ra ON ra.round_id = r.round_id AND ra.user_id = u.user_id "
         "WHERE rm.role = 'PLAYER' "
+        "AND (rm.left_at IS NULL OR rm.left_at >= m.started_at) "
         "GROUP BY u.username, rm.left_at "
         "ORDER BY total_score DESC", match_id);
     
@@ -2486,7 +2487,11 @@ void broadcast_final_ranking(int room_id, int match_id)
         "FROM rounds r "
         "JOIN round_answers ra ON ra.round_id = r.round_id "
         "JOIN users u ON ra.user_id = u.user_id "
+        "JOIN matches m ON m.match_id = r.match_id "
+        "JOIN room_members rm ON rm.user_id = u.user_id AND rm.room_id = m.room_id "
         "WHERE r.match_id = %d AND r.round_type = 'ROUND1' "
+        "AND rm.role = 'PLAYER' "
+        "AND (rm.left_at IS NULL OR rm.left_at >= m.started_at) "
         "ORDER BY ra.score_awarded DESC", match_id);
     
     json_len += snprintf(result_json + json_len, max_json_len - json_len, 
@@ -2528,7 +2533,11 @@ void broadcast_final_ranking(int room_id, int match_id)
         "FROM rounds r "
         "JOIN round_answers ra ON ra.round_id = r.round_id "
         "JOIN users u ON ra.user_id = u.user_id "
+        "JOIN matches m ON m.match_id = r.match_id "
+        "JOIN room_members rm ON rm.user_id = u.user_id AND rm.room_id = m.room_id "
         "WHERE r.match_id = %d AND r.round_type = 'V2' "
+        "AND rm.role = 'PLAYER' "
+        "AND (rm.left_at IS NULL OR rm.left_at >= m.started_at) "
         "ORDER BY ra.score_awarded DESC", match_id);
     
     json_len += snprintf(result_json + json_len, max_json_len - json_len, 
@@ -2571,7 +2580,11 @@ void broadcast_final_ranking(int room_id, int match_id)
         "FROM rounds r "
         "JOIN round_answers ra ON ra.round_id = r.round_id "
         "JOIN users u ON ra.user_id = u.user_id "
+        "JOIN matches m ON m.match_id = r.match_id "
+        "JOIN room_members rm ON rm.user_id = u.user_id AND rm.room_id = m.room_id "
         "WHERE r.match_id = %d AND r.round_type = 'V3' "
+        "AND rm.role = 'PLAYER' "
+        "AND (rm.left_at IS NULL OR rm.left_at >= m.started_at) "
         "ORDER BY ra.score_awarded DESC", match_id);
     
     json_len += snprintf(result_json + json_len, max_json_len - json_len, 
@@ -2991,7 +3004,7 @@ void broadcast_round2_result(int room_id, int round_id)
         "JOIN rounds r ON r.round_id = %d "
         "JOIN matches m ON r.match_id = m.match_id AND m.room_id = rm.room_id "
         "LEFT JOIN round_answers ra_current ON ra_current.round_id = r.round_id AND ra_current.user_id = u.user_id "
-        "WHERE rm.role = 'PLAYER' "
+        "WHERE rm.role = 'PLAYER' AND (rm.left_at IS NULL OR rm.left_at >= m.started_at) "
         "ORDER BY total_score DESC", round_id);
     
     char result_json[BUFF_SIZE];
@@ -3686,9 +3699,10 @@ void send_game_state_sync(Client *cli, int room_id) {
             "COALESCE(ra_current.is_correct, 0) AS is_correct "
             "FROM room_members rm "
             "JOIN users u ON rm.user_id = u.user_id "
+            "JOIN matches m ON m.room_id = rm.room_id AND m.match_id = %d "
             "LEFT JOIN round_answers ra_current ON ra_current.round_id = %d AND ra_current.user_id = u.user_id "
-            "WHERE rm.room_id = %d AND rm.left_at IS NULL AND rm.role = 'PLAYER' "
-            "ORDER BY total_score DESC", match_id, result_round_id, room_id);
+            "WHERE rm.room_id = %d AND (rm.left_at IS NULL OR rm.left_at >= m.started_at) AND rm.role = 'PLAYER' "
+            "ORDER BY total_score DESC", match_id, match_id, result_round_id, room_id);
         
         char result_players_json[1024] = "[";
         first = 1;
@@ -3732,9 +3746,10 @@ void send_game_state_sync(Client *cli, int room_id) {
             "COALESCE(ra_current.is_correct, 0) AS is_correct "
             "FROM room_members rm "
             "JOIN users u ON rm.user_id = u.user_id "
+            "JOIN matches m ON m.room_id = rm.room_id AND m.match_id = %d "
             "LEFT JOIN round_answers ra_current ON ra_current.round_id = %d AND ra_current.user_id = u.user_id "
-            "WHERE rm.room_id = %d AND rm.left_at IS NULL AND rm.role = 'PLAYER' "
-            "ORDER BY total_score DESC", match_id, current_round_id, room_id);
+            "WHERE rm.room_id = %d AND (rm.left_at IS NULL OR rm.left_at >= m.started_at) AND rm.role = 'PLAYER' "
+            "ORDER BY total_score DESC", match_id, match_id, current_round_id, room_id);
         
         char result_players_json[2048] = "[";
         first = 1;
